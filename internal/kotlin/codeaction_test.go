@@ -183,7 +183,7 @@ fun f(s: String): Money {
 	titles := func(needle string) []string {
 		var out []string
 		for _, a := range CodeActions(f, ix, strings.Index(string(f.Content), needle)) {
-			if a.Kind == protocol.QuickFix {
+			if a.Kind == protocol.QuickFix && strings.HasPrefix(a.Title, "Import ") {
 				out = append(out, a.Title)
 			}
 		}

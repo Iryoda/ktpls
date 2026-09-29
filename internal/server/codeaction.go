@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"os"
 
 	"github.com/Iryoda/ktpls/internal/cache"
 	"github.com/Iryoda/ktpls/internal/kotlin"
@@ -22,7 +23,14 @@ func (s *Server) CodeAction(ctx context.Context, params *protocol.CodeActionPara
 			return
 		}
 		defer release()
-		for _, a := range kotlin.CodeActions(f, sn.Index(), f.Mapper.PositionOffset(params.Range.Start)) {
+		read := func(path string) []byte {
+			if f := sn.File(path); f != nil && f.Content != nil {
+				return f.Content
+			}
+			content, _ := os.ReadFile(path)
+			return content
+		}
+		for _, a := range kotlin.CodeActionsWith(f, sn.Index(), f.Mapper.PositionOffset(params.Range.Start), read) {
 			if !kindRequested(a.Kind, params.Context.Only) {
 				continue
 			}
@@ -30,7 +38,14 @@ func (s *Server) CodeAction(ctx context.Context, params *protocol.CodeActionPara
 			if a.Open != nil {
 				action.Command = &protocol.Command{Title: a.Title, Command: kotlin.OpenCommand, Arguments: []any{a.Open}}
 			} else {
-				action.Edit = &protocol.WorkspaceEdit{Changes: map[protocol.DocumentURI][]protocol.TextEdit{params.TextDocument.URI: a.Edits}}
+				changes := map[protocol.DocumentURI][]protocol.TextEdit{}
+				if len(a.Edits) > 0 {
+					changes[params.TextDocument.URI] = a.Edits
+				}
+				for uri, edits := range a.Other {
+					changes[uri] = append(changes[uri], edits...)
+				}
+				action.Edit = &protocol.WorkspaceEdit{Changes: changes}
 			}
 			actions = append(actions, action)
 		}

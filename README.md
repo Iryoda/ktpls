@@ -38,7 +38,13 @@ Supported:
   - convert to expression body / block body;
   - specify type explicitly (adds the imports it needs);
   - add / remove braces of `if`, `for`, `while` and `when` branches;
-  - convert string concatenation to a template.
+  - convert string concatenation to a template;
+  - implement members of interfaces and abstract classes (generic
+    supertypes substituted, imports added);
+  - add the remaining `when` branches for enums and sealed types;
+  - create a function from its usage (top-level, private member, or a
+    member of the receiver's class, in its own file), with parameter and
+    return types inferred from the call.
 - **Document outline** and **workspace symbol search**.
 - **Syntax errors** as warnings while you edit. Only errors introduced
   since the file was opened are reported, so parser gaps on valid code

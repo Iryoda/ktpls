@@ -55,6 +55,9 @@ func (m *Mapper) lineEnd(l int) int {
 	return end
 }
 
+// Encoding returns the position encoding of m.
+func (m *Mapper) Encoding() PositionEncodingKind { return m.encoding }
+
 // OffsetPosition returns the position of byte offset off.
 func (m *Mapper) OffsetPosition(off int) (Position, error) {
 	if off < 0 || off > len(m.content) {

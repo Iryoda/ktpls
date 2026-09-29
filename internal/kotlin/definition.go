@@ -84,6 +84,10 @@ type resolver struct {
 	ix  *Index
 	src []byte
 
+	// read returns the current content of a workspace file (open buffer
+	// or disk), for edits to other files; nil if unavailable.
+	read func(path string) []byte
+
 	// Per-request memos, keyed by syntax node: typing an expression chain
 	// asks for the same subexpressions many times over. An entry is stored
 	// before it is computed, which also cuts cycles.
@@ -260,8 +264,11 @@ func callee(call *ts.Node) (name, recv *ts.Node) {
 }
 
 // inLibraryLambda reports whether n is inside a lambda passed to a
-// function that isn't declared in the workspace (other than a scope
-// function, whose receiver we model).
+// function the workspace doesn't declare: its implicit receiver (a DSL
+// scope) is then unknown. A call is to a workspace function only if it
+// resolves visibly: `recv.f { }` to a member or extension of recv's
+// workspace type, `f { }` to a declaration in scope. Scope functions
+// (apply/run/with) take their receiver's side.
 func (r *resolver) inLibraryLambda(n *ts.Node) bool {
 	lambda := ancestorOfKind(n, "lambda_literal")
 	if lambda == nil {
@@ -271,15 +278,30 @@ func (r *resolver) inLibraryLambda(n *ts.Node) bool {
 	if call == nil {
 		return false
 	}
-	name, _ := callee(call)
+	name, recv := callee(call)
 	if name == nil {
 		return false
 	}
 	fn := text(name, r.src)
 	if scopeFunctions[fn] {
-		return false
+		if fn == "with" {
+			recv = firstArgument(call)
+		}
+		return recv != nil && len(r.typesOf(recv, 1)) == 0
 	}
-	return len(r.ix.ByName(fn)) == 0
+	if recv == nil {
+		return !r.visiblyResolved(name, false)
+	}
+	types := r.typesOf(recv, 1)
+	if len(types) == 0 {
+		return true // unknown receiver: a library type
+	}
+	for _, t := range types {
+		if len(r.membersNamed(t.FQName, fn, false, map[string]bool{})) > 0 {
+			return false
+		}
+	}
+	return len(r.extensionsOn(types, "", fn)) == 0
 }
 
 // resolveInFile resolves a top-level name as seen from file sum: explicit

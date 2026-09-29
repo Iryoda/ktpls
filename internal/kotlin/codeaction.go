@@ -18,6 +18,8 @@ type Action struct {
 	// Open, if set, makes the action a navigation: selecting it opens
 	// this location (through the OpenCommand command).
 	Open *protocol.Location
+	// Other holds edits to files other than the current one.
+	Other map[protocol.DocumentURI][]protocol.TextEdit
 }
 
 // OpenCommand is the command of navigation actions. Its argument is a
@@ -26,10 +28,18 @@ const OpenCommand = "ktpls.open"
 
 // CodeActions returns the code actions available at offset in f.
 func CodeActions(f *ParsedFile, ix *Index, offset int) []Action {
-	r := &resolver{f: f, ix: ix, src: f.Content}
+	return CodeActionsWith(f, ix, offset, nil)
+}
+
+// CodeActionsWith is CodeActions with a reader of other workspace files'
+// current content, for actions editing them.
+func CodeActionsWith(f *ParsedFile, ix *Index, offset int, read func(path string) []byte) []Action {
+	r := &resolver{f: f, ix: ix, src: f.Content, read: read}
 	var out []Action
 	for _, fn := range []func(int) []Action{
-		r.addImports, r.nameArguments, r.testNavigation,
+		// Quick fixes first.
+		r.addImports, r.createFunction, r.implementMembers, r.whenBranches,
+		r.nameArguments, r.testNavigation,
 		r.convertBody, r.specifyType, r.braces, r.stringTemplate,
 	} {
 		out = append(out, fn(offset)...)
