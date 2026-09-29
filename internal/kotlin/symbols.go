@@ -1,6 +1,7 @@
 package kotlin
 
 import (
+	"strings"
 	"unicode"
 
 	ts "github.com/tree-sitter/go-tree-sitter"
@@ -103,6 +104,7 @@ type Param struct {
 	Name           string
 	Type           string
 	SelectionRange protocol.Range
+	Vararg         bool
 }
 
 // An Import is one import directive.
@@ -413,9 +415,20 @@ func (x *extractor) params(list *ts.Node, kind string) []Param {
 			continue
 		}
 		rng, _ := x.m.OffsetRange(int(name.StartByte()), int(name.EndByte()))
-		out = append(out, Param{Name: text(name, x.src), Type: declaredTypeText(p, x.src), SelectionRange: rng})
+		out = append(out, Param{Name: text(name, x.src), Type: declaredTypeText(p, x.src), SelectionRange: rng, Vararg: isVararg(p, x.src)})
 	}
 	return out
+}
+
+// isVararg reports whether a parameter is declared vararg. In function
+// parameter lists the modifiers are the preceding sibling node; in class
+// parameters they are a child.
+func isVararg(p *ts.Node, src []byte) bool {
+	mods := child(p, "modifiers", "parameter_modifiers")
+	if prev := p.PrevNamedSibling(); mods == nil && prev != nil && prev.Kind() == "parameter_modifiers" {
+		mods = prev
+	}
+	return mods != nil && strings.Contains(text(mods, src), "vararg")
 }
 
 // receiverType returns the receiver type of an extension declaration.

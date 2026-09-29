@@ -22,6 +22,7 @@ type Server interface {
 	Definition(context.Context, *DefinitionParams) ([]Location, error)
 	Implementation(context.Context, *ImplementationParams) ([]Location, error)
 	References(context.Context, *ReferenceParams) ([]Location, error)
+	CodeAction(context.Context, *CodeActionParams) ([]CodeAction, error)
 	Hover(context.Context, *HoverParams) (*Hover, error)
 	Completion(context.Context, *CompletionParams) (*CompletionList, error)
 	DocumentSymbol(context.Context, *DocumentSymbolParams) ([]DocumentSymbol, error)
@@ -102,6 +103,13 @@ func Dispatch(ctx context.Context, s Server, method string, params json.RawMessa
 			return nil, true, err
 		}
 		res, err := s.References(ctx, &p)
+		return res, true, err
+	case "textDocument/codeAction":
+		var p CodeActionParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.CodeAction(ctx, &p)
 		return res, true, err
 	case "textDocument/hover":
 		var p HoverParams

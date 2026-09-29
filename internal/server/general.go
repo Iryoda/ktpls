@@ -40,6 +40,7 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 
 			ImplementationProvider:  true,
 			ReferencesProvider:      true,
+			CodeActionProvider:      true,
 			DocumentSymbolProvider:  true,
 			WorkspaceSymbolProvider: true,
 		},

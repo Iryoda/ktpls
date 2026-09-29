@@ -102,6 +102,7 @@ type ServerCapabilities struct {
 
 	ImplementationProvider  bool `json:"implementationProvider,omitempty"`
 	ReferencesProvider      bool `json:"referencesProvider,omitempty"`
+	CodeActionProvider      bool `json:"codeActionProvider,omitempty"`
 	DocumentSymbolProvider  bool `json:"documentSymbolProvider,omitempty"`
 	WorkspaceSymbolProvider bool `json:"workspaceSymbolProvider,omitempty"`
 }
@@ -171,6 +172,30 @@ type ReferenceParams struct {
 type ReferenceContext struct {
 	IncludeDeclaration bool `json:"includeDeclaration"`
 }
+
+type CodeActionParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+	Context      CodeActionContext      `json:"context"`
+}
+
+type CodeActionContext struct {
+	Diagnostics []Diagnostic `json:"diagnostics"`
+	Only        []string     `json:"only,omitempty"`
+}
+
+type CodeAction struct {
+	Title string         `json:"title"`
+	Kind  string         `json:"kind,omitempty"`
+	Edit  *WorkspaceEdit `json:"edit,omitempty"`
+}
+
+type WorkspaceEdit struct {
+	Changes map[DocumentURI][]TextEdit `json:"changes"`
+}
+
+// Code action kinds.
+const RefactorRewrite = "refactor.rewrite"
 
 type HoverParams struct {
 	TextDocumentPositionParams
