@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/Iryoda/ktpls/internal/cache"
 	"github.com/Iryoda/ktpls/internal/protocol"
@@ -62,7 +64,19 @@ func applyChanges(base []byte, enc protocol.PositionEncodingKind, changes []prot
 }
 
 func (s *Server) DidSave(ctx context.Context, params *protocol.DidSaveTextDocumentParams) error {
-	// The open buffer's overlay is already up to date via didChange.
+	// The open buffer's overlay is already up to date via didChange; a
+	// save is what the build sees, so compile.
+	path, err := params.TextDocument.URI.Path()
+	if err != nil {
+		return err
+	}
+	base := filepath.Base(path)
+	if cache.IsKotlinFile(path) || strings.HasSuffix(base, ".gradle") || base == "gradle.properties" {
+		s.diagMu.Lock()
+		s.savedSinceBuild[path] = true
+		s.diagMu.Unlock()
+		s.requestBuild()
+	}
 	return nil
 }
 

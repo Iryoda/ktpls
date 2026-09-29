@@ -46,9 +46,14 @@ Supported:
     member of the receiver's class, in its own file), with parameter and
     return types inferred from the call.
 - **Document outline** and **workspace symbol search**.
-- **Syntax errors** as warnings while you edit. Only errors introduced
-  since the file was opened are reported, so parser gaps on valid code
-  don't show up as noise.
+- **Compiler diagnostics**: the Kotlin compiler's own errors and warnings
+  (type mismatches, nullability, unresolved references, …), through the
+  project's Gradle build, in the background on startup and on save (about
+  1–5 s on an incremental build). See [editors/nvim](editors/nvim) for
+  options, such as the JDK the build needs.
+- **Syntax errors** as warnings while you type, before the next build.
+  Only errors introduced since the file was opened are reported, so parser
+  gaps on valid code don't show up as noise.
 - **Type inference** for `it` and lambda parameters (`xs.forEach { it. }`,
   `x?.let { it }`, `for (a in xs)`, `xs.first()`, `map[key]`, and
   workspace functions taking lambdas), so definition, hover and completion
@@ -132,6 +137,7 @@ logfile.
 | `internal/cache` | Session, editor overlays, parsed files (`gopls/internal/cache`) |
 | `internal/kotlin` | Kotlin language logic (`gopls/internal/golang`) |
 | `internal/fuzzy` | Fuzzy matching for completion (`gopls/internal/fuzzy`) |
+| `internal/build` | Runs the Gradle build and parses the Kotlin compiler's messages |
 | `internal/util/textutil` | Shared text helpers: lines, indentation, identifiers, UTF-16 (`gopls/internal/util`) |
 | `tools/tsdump` | Dev tool: print a file's syntax tree (`go run ./tools/tsdump File.kt`) |
 

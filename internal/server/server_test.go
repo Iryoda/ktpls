@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -406,6 +408,81 @@ func TestOpenCommandShowsDocument(t *testing.T) {
 			return
 		case <-timeout:
 			t.Fatal("no window/showDocument")
+		}
+	}
+}
+
+func TestCompilerDiagnostics(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "src/A.kt")
+	writeFile(t, file, "package a\n\nval x: Int = \"no\"\nfun f() = pirce()\n")
+	// A fake build: prints what the file "output" holds.
+	script := filepath.Join(root, "fake-gradle.sh")
+	writeFile(t, script, "#!/bin/sh\ncat \"$(dirname \"$0\")/output\"\n")
+	output := func(s string) { writeFile(t, filepath.Join(root, "output"), s) }
+	uri := protocol.URIFromPath(file)
+	output("> Task :compileKotlin FAILED\n" +
+		"e: " + string(uri) + ":3:14 Initializer type mismatch: expected 'Int', actual 'String'.\n" +
+		"e: " + string(uri) + ":4:11 Unresolved reference 'pirce'.\n" +
+		"w: " + string(uri) + ":1:1 A warning.\n")
+
+	c := newTestClient(t)
+	resp := c.call("initialize", map[string]any{
+		"processId": nil, "rootUri": protocol.URIFromPath(root), "capabilities": map[string]any{},
+		"initializationOptions": map[string]any{"compile": map[string]any{"command": []string{"/bin/sh", script}}},
+	})
+	if resp.Error != nil {
+		t.Fatal(resp.Error)
+	}
+	c.notify("initialized", map[string]any{}) // the first build runs after the workspace loads
+
+	d := c.nextDiagnosticsFor(uri)
+	var got []string
+	for _, diag := range d.Diagnostics {
+		got = append(got, fmt.Sprintf("%d:%d-%d %s %d", diag.Range.Start.Line, diag.Range.Start.Character, diag.Range.End.Character, diag.Source, diag.Severity))
+	}
+	want := []string{"2:13-17 kotlinc 1", "3:10-15 kotlinc 1", "0:0-7 kotlinc 2"} // "no", pirce, package
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("diagnostics:\n got  %v\n want %v", got, want)
+	}
+
+	// Everything up to date: nothing changes.
+	output("> Task :compileKotlin UP-TO-DATE\n")
+	c.notify("textDocument/didSave", map[string]any{"textDocument": map[string]any{"uri": uri}})
+	if d := c.nextDiagnosticsFor(uri); len(d.Diagnostics) != 3 {
+		t.Errorf("up to date: %d diagnostics, want 3 kept", len(d.Diagnostics))
+	}
+	// Fixed and saved: errors gone; the warning too (the file recompiled).
+	output("> Task :compileKotlin\nBUILD SUCCESSFUL\n")
+	c.notify("textDocument/didSave", map[string]any{"textDocument": map[string]any{"uri": uri}})
+	if d := c.nextDiagnosticsFor(uri); len(d.Diagnostics) != 0 {
+		t.Errorf("after fix: %+v", d.Diagnostics)
+	}
+}
+
+// nextDiagnosticsFor waits for diagnostics published for uri.
+func (c *testClient) nextDiagnosticsFor(uri protocol.DocumentURI) *protocol.PublishDiagnosticsParams {
+	c.t.Helper()
+	for {
+		d := c.nextDiagnostics()
+		if d.URI == uri {
+			return d
+		}
+	}
+}
+
+func TestTokenEnd(t *testing.T) {
+	for _, tt := range []struct{ src, want string }{
+		{"pirce()", "pirce"},
+		{`"no" + x`, `"no"`},
+		{`"a\"b" + x`, `"a\"b"`},
+		{"(a + b) * c", "(a + b)"},
+		{"+ x", "+"},
+		{"é1 x", "é1"},
+		{`"unclosed`, `"`},
+	} {
+		if got := tt.src[:tokenEnd([]byte(tt.src), 0)]; got != tt.want {
+			t.Errorf("tokenEnd(%q) covers %q, want %q", tt.src, got, tt.want)
 		}
 	}
 }

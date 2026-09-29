@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Iryoda/ktpls/internal/build"
 	"github.com/Iryoda/ktpls/internal/cache"
 	"github.com/Iryoda/ktpls/internal/protocol"
 )
@@ -46,9 +47,15 @@ type Server struct {
 	lastScan time.Time   // guarded by mu
 	scanning atomic.Bool // a background rescan is running
 
-	diagMu    sync.Mutex
-	baselines map[string]map[string]int // open file -> syntax errors present when opened
-	diagTimer map[string]*time.Timer    // open file -> pending publish
+	diagMu           sync.Mutex
+	baselines        map[string]map[string]int  // open file -> syntax errors present when opened
+	diagTimer        map[string]*time.Timer     // open file -> pending publish
+	compileMsgs      map[string][]build.Message // file -> compiler messages
+	savedSinceBuild  map[string]bool
+	lastBuildFailure string
+
+	builder  *build.Runner // nil: no compiler diagnostics
+	progress bool          // the client shows work-done progress
 }
 
 // rescanInterval is the minimum time between background rescans of the
@@ -69,6 +76,9 @@ func New(client *protocol.Conn, log *slog.Logger) *Server {
 		loaded:    make(chan struct{}),
 		baselines: map[string]map[string]int{},
 		diagTimer: map[string]*time.Timer{},
+
+		compileMsgs:     map[string][]build.Message{},
+		savedSinceBuild: map[string]bool{},
 	}
 }
 

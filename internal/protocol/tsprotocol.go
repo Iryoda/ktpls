@@ -65,6 +65,8 @@ type InitializeParams struct {
 	RootURI          *DocumentURI       `json:"rootUri"`
 	Capabilities     ClientCapabilities `json:"capabilities"`
 	WorkspaceFolders []WorkspaceFolder  `json:"workspaceFolders,omitempty"`
+
+	InitializationOptions json.RawMessage `json:"initializationOptions,omitempty"`
 }
 
 type ClientInfo struct {
@@ -79,6 +81,34 @@ type WorkspaceFolder struct {
 
 type ClientCapabilities struct {
 	General *GeneralClientCapabilities `json:"general,omitempty"`
+	Window  *WindowClientCapabilities  `json:"window,omitempty"`
+}
+
+type WindowClientCapabilities struct {
+	WorkDoneProgress bool `json:"workDoneProgress,omitempty"`
+}
+
+// --- Work done progress ---
+
+type WorkDoneProgressCreateParams struct {
+	Token string `json:"token"`
+}
+
+type ProgressParams struct {
+	Token string `json:"token"`
+	Value any    `json:"value"`
+}
+
+type WorkDoneProgressBegin struct {
+	Kind        string `json:"kind"` // "begin"
+	Title       string `json:"title"`
+	Message     string `json:"message,omitempty"`
+	Cancellable bool   `json:"cancellable"`
+}
+
+type WorkDoneProgressEnd struct {
+	Kind    string `json:"kind"` // "end"
+	Message string `json:"message,omitempty"`
 }
 
 type GeneralClientCapabilities struct {

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"slices"
 	"time"
 
 	"github.com/Iryoda/ktpls/internal/cache"
@@ -41,7 +42,8 @@ func (s *Server) scheduleDiagnostics(path string) {
 	s.diagTimer[path] = time.AfterFunc(diagnosticsDelay, func() { s.publishDiagnostics(path) })
 }
 
-// closeDiagnostics forgets path and clears its diagnostics.
+// closeDiagnostics forgets path's syntax diagnostics; its compiler
+// diagnostics stay.
 func (s *Server) closeDiagnostics(path string) {
 	s.diagMu.Lock()
 	if t, ok := s.diagTimer[path]; ok {
@@ -50,28 +52,43 @@ func (s *Server) closeDiagnostics(path string) {
 	}
 	delete(s.baselines, path)
 	s.diagMu.Unlock()
-	s.notifyDiagnostics(protocol.URIFromPath(path), nil, nil)
+	s.publishDiagnostics(path)
 }
 
+// publishDiagnostics publishes path's diagnostics: the compiler's, and,
+// for an open buffer, syntax errors introduced since it was opened (live,
+// before the next build), except on lines the compiler already reports.
 func (s *Server) publishDiagnostics(path string) {
 	s.diagMu.Lock()
 	baseline, open := s.baselines[path]
+	msgs := slices.Clone(s.compileMsgs[path])
 	s.diagMu.Unlock()
-	if !open {
-		return // closed meanwhile
-	}
 	var diags []protocol.Diagnostic
 	var version *int32
-	var uri protocol.DocumentURI
+	uri := protocol.URIFromPath(path)
 	s.session.Read(func(sn *cache.Snapshot) {
-		f := sn.File(path)
+		if f := sn.File(path); f != nil && f.Overlay {
+			v := f.Version
+			version, uri = &v, f.URI
+		}
+		if len(msgs) > 0 {
+			diags = s.compileDiagnostics(fileContent(sn, path), msgs)
+		}
+		if !open {
+			return
+		}
 		pf := parsedOverlay(sn, path)
 		if pf == nil {
 			return
 		}
-		v := f.Version
-		version, uri = &v, f.URI
+		compiled := map[uint32]bool{}
+		for _, d := range diags {
+			compiled[d.Range.Start.Line] = true
+		}
 		for _, e := range kotlin.NewSyntaxErrors(kotlin.SyntaxErrors(pf), baseline) {
+			if compiled[e.Range.Start.Line] {
+				continue
+			}
 			diags = append(diags, protocol.Diagnostic{
 				Range:    e.Range,
 				Severity: protocol.SeverityWarning,
@@ -80,9 +97,7 @@ func (s *Server) publishDiagnostics(path string) {
 			})
 		}
 	})
-	if uri != "" {
-		s.notifyDiagnostics(uri, version, diags)
-	}
+	s.notifyDiagnostics(uri, version, diags)
 }
 
 func (s *Server) notifyDiagnostics(uri protocol.DocumentURI, version *int32, diags []protocol.Diagnostic) {

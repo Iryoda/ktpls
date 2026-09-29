@@ -22,6 +22,9 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 	session := cache.NewSession(root, enc, s.log)
 	s.log.Info("initialize", "session", session.String())
 
+	progress := params.Capabilities.Window != nil && params.Capabilities.Window.WorkDoneProgress
+	s.setupCompile(root, params.InitializationOptions, progress)
+
 	s.mu.Lock()
 	s.session = session
 	s.state = stateInitialized
@@ -91,6 +94,7 @@ func (s *Server) loadWorkspace() {
 		s.lastScan = time.Now()
 		s.mu.Unlock()
 		close(s.loaded)
+		s.requestBuild() // report the project's compiler errors on startup
 	}()
 	start := time.Now()
 	n, err := s.session.LoadWorkspace(s.ctx)

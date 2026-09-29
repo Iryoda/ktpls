@@ -28,3 +28,26 @@ pulling new commits the Mason UI shows an update (press `U`).
 
 Without Mason: run `make install` in the repository root, and make sure
 `~/go/bin` is on your `PATH`.
+
+## Compiler diagnostics
+
+In a Gradle project (a `gradlew`, or `gradle` on `PATH` with a build
+file), ktpls runs `compileKotlin compileTestKotlin` in the background
+after the workspace loads and after each save, and shows the Kotlin
+compiler's errors and warnings (source `kotlinc`). Progress shows up in
+`vim.lsp.status()` (and plugins such as fidget.nvim).
+
+Options, all optional:
+
+```lua
+vim.lsp.config("ktpls", {
+  init_options = {
+    compile = {
+      enabled = true,                              -- false turns it off
+      tasks = { "compileKotlin", "compileTestKotlin" },
+      command = { "./gradlew" },                   -- default: detected
+      env = { JAVA_HOME = "/path/to/jdk" },        -- the JDK the build needs
+    },
+  },
+})
+```

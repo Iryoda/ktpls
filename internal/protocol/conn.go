@@ -29,6 +29,9 @@ type Conn struct {
 
 	wmu    sync.Mutex // serializes writes
 	nextID int        // guarded by wmu
+
+	pmu     sync.Mutex
+	pending map[string]chan *Message // request id -> waiting Request
 }
 
 // NewConn returns a connection reading from r and writing to w.
@@ -57,7 +60,7 @@ func (c *Conn) Run(ctx context.Context, h Handler) error {
 			continue
 		}
 		if msg.Method == "" {
-			// A response to a server->client request. We don't issue any yet.
+			c.deliver(&msg) // a response to one of our requests
 			continue
 		}
 		result, err := c.handle(ctx, h, &msg)
@@ -117,19 +120,68 @@ func (c *Conn) Notify(method string, params any) error {
 	}{"2.0", method, params})
 }
 
-// Call sends a request to the client without waiting for its response
-// (responses to server requests are read and dropped by Run).
+// Call sends a request to the client without waiting for its response.
 func (c *Conn) Call(method string, params any) error {
+	_, err := c.send(method, params, false)
+	return err
+}
+
+// Request sends a request to the client and waits for its response, or
+// for ctx to be done. It must not be called from a Handler: responses
+// are read by Run, which doesn't read while a handler runs.
+func (c *Conn) Request(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	ch, err := c.send(method, params, true)
+	if err != nil {
+		return nil, err
+	}
+	select {
+	case msg := <-ch:
+		if msg.Error != nil {
+			return nil, msg.Error
+		}
+		return msg.Result, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (c *Conn) send(method string, params any, wait bool) (chan *Message, error) {
 	c.wmu.Lock()
 	c.nextID++
-	id := c.nextID
+	id := fmt.Sprintf("ktpls-%d", c.nextID)
 	c.wmu.Unlock()
-	return c.write(struct {
+	var ch chan *Message
+	if wait {
+		ch = make(chan *Message, 1)
+		c.pmu.Lock()
+		if c.pending == nil {
+			c.pending = map[string]chan *Message{}
+		}
+		c.pending[id] = ch
+		c.pmu.Unlock()
+	}
+	err := c.write(struct {
 		JSONRPC string `json:"jsonrpc"`
 		ID      string `json:"id"`
 		Method  string `json:"method"`
 		Params  any    `json:"params,omitempty"`
-	}{"2.0", fmt.Sprintf("ktpls-%d", id), method, params})
+	}{"2.0", id, method, params})
+	return ch, err
+}
+
+// deliver hands a response to the Request waiting for it, if any.
+func (c *Conn) deliver(msg *Message) {
+	var id string
+	if err := json.Unmarshal(msg.ID, &id); err != nil {
+		return
+	}
+	c.pmu.Lock()
+	ch := c.pending[id]
+	delete(c.pending, id)
+	c.pmu.Unlock()
+	if ch != nil {
+		ch <- msg
+	}
 }
 
 func (c *Conn) write(v any) error {
