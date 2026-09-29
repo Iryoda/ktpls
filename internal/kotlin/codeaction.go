@@ -28,7 +28,10 @@ const OpenCommand = "ktpls.open"
 func CodeActions(f *ParsedFile, ix *Index, offset int) []Action {
 	r := &resolver{f: f, ix: ix, src: f.Content}
 	var out []Action
-	for _, fn := range []func(int) []Action{r.addImports, r.nameArguments, r.testNavigation} {
+	for _, fn := range []func(int) []Action{
+		r.addImports, r.nameArguments, r.testNavigation,
+		r.convertBody, r.specifyType, r.braces, r.stringTemplate,
+	} {
 		out = append(out, fn(offset)...)
 	}
 	return out

@@ -69,9 +69,18 @@ type Symbol struct {
 	// function, or a cheaply inferred type (`val x = Foo()`), as written
 	// with generic arguments ("List<Account>"); "" if unknown.
 	Type string
-	// Supertypes lists a class or object's supertypes as written
-	// (e.g. "Shape", "a.b.Base").
-	Supertypes []string
+	// Supertypes lists a class or object's supertypes as written, without
+	// type arguments (e.g. "Shape", "a.b.Base"); SupertypeTexts has the
+	// same supertypes with their type arguments ("Repo<Account>").
+	Supertypes     []string
+	SupertypeTexts []string
+	// TypeParams names a class's or function's type parameters.
+	TypeParams []string
+	// Abstract reports a member without an implementation: declared
+	// abstract, or an interface member without a body. Sealed reports a
+	// sealed class or interface. Mutable reports a var property; Suspend
+	// a suspend function.
+	Abstract, Sealed, Mutable, Suspend bool
 	// Receiver is the receiver type of an extension function or property
 	// (`fun String.shout()` has Receiver "String"); "" otherwise.
 	Receiver string
@@ -92,6 +101,8 @@ type Symbol struct {
 	// Byte extent of the declaration in the file version it was extracted
 	// from; used to match syntax nodes in open files to their symbols.
 	StartByte, EndByte uint
+
+	hasBody bool // functions: a body; properties: an initializer or accessor
 }
 
 // Location returns the symbol's name location.
@@ -148,7 +159,57 @@ func Extract(path string, src []byte, tree *ts.Tree, m *protocol.Mapper) *FileSu
 		x.sum.Package = dotted(child(h, "identifier"), src)
 	}
 	x.visit(root, x.sum.Package, "")
+	markInterfaceMembers(x.sum)
 	return x.sum
+}
+
+// markInterfaceMembers marks the members of interfaces declared without a
+// body (functions) or accessor/initializer (properties) as abstract.
+func markInterfaceMembers(sum *FileSummary) {
+	ifaces := map[string]bool{}
+	for _, s := range sum.Symbols {
+		if s.Kind == KindInterface {
+			ifaces[s.FQName] = true
+		}
+	}
+	for _, s := range sum.Symbols {
+		if ifaces[s.Container] && !s.hasBody && (s.Kind == KindFunction || s.Kind == KindProperty) {
+			s.Abstract = true
+		}
+	}
+}
+
+// hasModifier reports whether decl has the modifier keyword mod.
+func hasModifier(decl *ts.Node, mod string) bool {
+	mods := child(decl, "modifiers")
+	if mods == nil {
+		return false
+	}
+	var found bool
+	var walk func(n *ts.Node)
+	walk = func(n *ts.Node) {
+		if n.Kind() == mod && !n.IsNamed() {
+			found = true
+		}
+		for i := uint(0); i < n.ChildCount() && !found; i++ {
+			walk(n.Child(i))
+		}
+	}
+	walk(mods)
+	return found
+}
+
+// typeParamNames returns the type parameter names declared by decl.
+func typeParamNames(decl *ts.Node, src []byte) []string {
+	var out []string
+	if tps := child(decl, "type_parameters"); tps != nil {
+		for _, tp := range childrenOf(tps, "type_parameter") {
+			if id := child(tp, "type_identifier"); id != nil {
+				out = append(out, text(id, src))
+			}
+		}
+	}
+	return out
 }
 
 type extractor struct {
@@ -194,6 +255,10 @@ func (x *extractor) visit(n *ts.Node, qual, container string) {
 			s.Type = declaredTypeText(n, x.src)
 			s.Receiver = receiverType(n, x.src)
 			s.Params = x.params(child(n, "function_value_parameters"), "parameter")
+			s.TypeParams = typeParamNames(n, x.src)
+			s.hasBody = child(n, "function_body") != nil
+			s.Abstract = hasModifier(n, "abstract")
+			s.Suspend = hasModifier(n, "suspend")
 		}
 		return
 	case "property_declaration":
@@ -264,14 +329,23 @@ func (x *extractor) classLike(n *ts.Node, container, qual string) {
 		return
 	}
 	s.Companion = n.Kind() == "companion_object"
+	s.TypeParams = typeParamNames(n, x.src)
+	s.Sealed = hasModifier(n, "sealed")
+	s.Abstract = hasModifier(n, "abstract")
 
 	for _, d := range childrenOf(n, "delegation_specifier") {
-		if st := typeName(child(d, "user_type", "constructor_invocation", "explicit_delegation"), x.src); st != "" {
-			s.Supertypes = append(s.Supertypes, st)
-		} else if ed := child(d, "explicit_delegation"); ed != nil {
-			if st := typeName(child(ed, "user_type"), x.src); st != "" {
-				s.Supertypes = append(s.Supertypes, st)
+		t := child(d, "user_type", "constructor_invocation")
+		if t == nil {
+			if ed := child(d, "explicit_delegation"); ed != nil {
+				t = child(ed, "user_type")
 			}
+		}
+		if st := typeName(t, x.src); st != "" {
+			s.Supertypes = append(s.Supertypes, st)
+			if t.Kind() == "constructor_invocation" {
+				t = child(t, "user_type")
+			}
+			s.SupertypeTexts = append(s.SupertypeTexts, typeTextOfNode(t, x.src))
 		}
 	}
 	if pc := child(n, "primary_constructor"); pc != nil {
@@ -283,6 +357,8 @@ func (x *extractor) classLike(n *ts.Node, container, qual string) {
 			if pname := child(p, "simple_identifier"); pname != nil {
 				ps := x.add(p, pname, KindProperty, s.FQName, s.FQName)
 				ps.Type = declaredTypeText(p, x.src)
+				ps.hasBody = true
+				ps.Mutable = hasToken(child(p, "binding_pattern_kind"), "var")
 			}
 		}
 	}
@@ -395,6 +471,9 @@ func (x *extractor) property(n *ts.Node, qual, container string) {
 		}
 		s := x.add(n, name, KindProperty, qual, container)
 		s.Receiver = receiverType(n, x.src)
+		s.hasBody = child(n, "getter", "setter", "property_delegate") != nil || propertyInitializer(n) != nil
+		s.Abstract = hasModifier(n, "abstract")
+		s.Mutable = child(n, "binding_pattern_kind") != nil && hasToken(child(n, "binding_pattern_kind"), "var")
 		s.Type = declaredTypeText(v, x.src)
 		if s.Type == "" {
 			s.Type = inferredType(n, x.src)

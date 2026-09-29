@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"unicode/utf8"
+
+	"github.com/Iryoda/ktpls/internal/util/textutil"
 )
 
 // A Mapper converts between byte offsets in a document's content and LSP
@@ -64,7 +66,7 @@ func (m *Mapper) OffsetPosition(off int) (Position, error) {
 	if m.encoding == PositionEncodingUTF8 {
 		char = off - start
 	} else {
-		char = utf16Len(m.content[start:off])
+		char = textutil.UTF16Len(m.content[start:off])
 	}
 	return Position{Line: uint32(line), Character: uint32(char)}, nil
 }
@@ -116,20 +118,4 @@ func (m *Mapper) RangeOffsets(r Range) (start, end int) {
 		end = start
 	}
 	return start, end
-}
-
-// utf16Len returns the number of UTF-16 code units needed to encode b.
-// Invalid UTF-8 bytes count as one unit each (U+FFFD).
-func utf16Len(b []byte) int {
-	n := 0
-	for len(b) > 0 {
-		r, size := utf8.DecodeRune(b)
-		if r >= 0x10000 {
-			n += 2
-		} else {
-			n++
-		}
-		b = b[size:]
-	}
-	return n
 }

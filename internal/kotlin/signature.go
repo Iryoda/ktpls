@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	ts "github.com/tree-sitter/go-tree-sitter"
+
+	"github.com/Iryoda/ktpls/internal/util/textutil"
 )
 
 // maxSignatureLine is the width beyond which a signature's parameter list
@@ -54,7 +56,7 @@ func Signature(decl *ts.Node, src []byte) string {
 	sig := w.String()
 	if decl.Kind() == "property_declaration" {
 		if init := propertyInitializer(decl); init != nil {
-			if t := collapseSpace(text(init, src)); len(t) <= maxInitializer && !strings.Contains(text(init, src), "\n") {
+			if t := textutil.CollapseSpace(text(init, src)); len(t) <= maxInitializer && !strings.Contains(text(init, src), "\n") {
 				sig += " = " + t
 			}
 		}
@@ -163,11 +165,6 @@ func (w *sigWriter) String() string {
 		s = strings.ReplaceAll(s, r.old, r.new)
 	}
 	return s
-}
-
-// collapseSpace replaces each run of whitespace in s with one space.
-func collapseSpace(s string) string {
-	return strings.Join(strings.Fields(s), " ")
 }
 
 // wrapParams breaks the first parenthesized parameter list of a long

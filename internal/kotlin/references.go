@@ -1,11 +1,9 @@
 package kotlin
 
 import (
-	"bytes"
 	"cmp"
 	"slices"
 	"sync"
-	"unicode/utf8"
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
@@ -111,29 +109,6 @@ func (r *resolver) findUses(targets []target, names map[string]bool, includeDecl
 	})
 	return locs
 }
-
-// ContainsWord reports whether name occurs in content as a whole
-// identifier (not as part of a longer one).
-func ContainsWord(content []byte, name string) bool {
-	if name == "" {
-		return false
-	}
-	for i := 0; ; {
-		j := bytes.Index(content[i:], []byte(name))
-		if j < 0 {
-			return false
-		}
-		start, end := i+j, i+j+len(name)
-		before, _ := utf8.DecodeLastRune(content[:start])
-		after, _ := utf8.DecodeRune(content[end:])
-		if (start == 0 || !isIdentRune(before)) && (end == len(content) || !isIdentRune(after)) {
-			return true
-		}
-		i = start + 1
-	}
-}
-
-func isIdentRune(r rune) bool { return r == '_' || isLetterOrDigit(r) }
 
 func walkIdentifiers(n *ts.Node, fn func(*ts.Node)) {
 	if isIdentifier(n) {

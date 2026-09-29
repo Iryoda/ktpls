@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
 	"github.com/Iryoda/ktpls/internal/fuzzy"
 	"github.com/Iryoda/ktpls/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/util/textutil"
 )
 
 // maxCompletions caps the number of items returned; when more match, the
@@ -97,16 +97,12 @@ func identStartBefore(src []byte, offset int) int {
 	i := offset
 	for i > 0 {
 		r, size := utf8.DecodeLastRune(src[:i])
-		if r != '_' && !isLetterOrDigit(r) {
+		if r != '_' && !textutil.IsLetterOrDigit(r) {
 			break
 		}
 		i -= size
 	}
 	return i
-}
-
-func isLetterOrDigit(r rune) bool {
-	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r >= utf8.RuneSelf
 }
 
 // inCommentOrString reports whether offset is inside a comment or the
@@ -340,7 +336,7 @@ func (c *completer) scope(offset int) {
 	}
 	if inArgs {
 		for _, kw := range []string{"null", "true", "false", "this"} {
-			if score, ok := fuzzy.Score(c.prefix, kw); ok && sameFirstRune(c.prefix, kw) {
+			if score, ok := fuzzy.Score(c.prefix, kw); ok && textutil.SameFirstRune(c.prefix, kw) {
 				c.add(protocol.CompletionItem{Label: kw, Kind: protocol.CompletionKindKeyword}, tierKeyword, score)
 			}
 		}
@@ -348,7 +344,7 @@ func (c *completer) scope(offset int) {
 	}
 	if !typesOnly {
 		for _, kw := range keywords {
-			if !sameFirstRune(c.prefix, kw) {
+			if !textutil.SameFirstRune(c.prefix, kw) {
 				continue
 			}
 			if score, ok := fuzzy.Score(c.prefix, kw); ok {
@@ -538,7 +534,7 @@ func (c *completer) addVisible(s *Symbol, typesOnly bool, alias string, visible 
 // edit adding the import.
 func (c *completer) unimported(sum *FileSummary, typesOnly bool, visible map[string]bool) {
 	for name := range c.ix.Names() {
-		if !sameFirstRune(c.prefix, name) {
+		if !textutil.SameFirstRune(c.prefix, name) {
 			continue
 		}
 		score, ok := fuzzy.Score(c.prefix, name)
@@ -558,15 +554,6 @@ func (c *completer) unimported(sum *FileSummary, typesOnly bool, visible map[str
 			c.add(item, tierWorkspace, score)
 		}
 	}
-}
-
-// sameFirstRune reports whether a and b start with the same letter,
-// ignoring case. The unimported and keyword tiers require it: matching
-// anywhere would flood the list with scattered subsequence matches.
-func sameFirstRune(a, b string) bool {
-	ra, _ := utf8.DecodeRuneInString(a)
-	rb, _ := utf8.DecodeRuneInString(b)
-	return unicode.ToLower(ra) == unicode.ToLower(rb)
 }
 
 // importEdit returns an edit adding `import fq` to the file.
@@ -695,7 +682,7 @@ func (c *completer) list() *protocol.CompletionList {
 		if it.LabelDetails == nil {
 			it.LabelDetails = &protocol.CompletionItemLabelDetails{}
 		}
-		it.LabelDetails.Detail = fmt.Sprintf(" (+%d %s)", n, plural(n, "overload", "overloads"))
+		it.LabelDetails.Detail = fmt.Sprintf(" (+%d %s)", n, textutil.Plural(n, "overload", "overloads"))
 	}
 	slices.SortStableFunc(c.items, func(a, b scored) int {
 		if a.tier != b.tier {

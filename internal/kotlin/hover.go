@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Iryoda/ktpls/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/util/textutil"
 )
 
 // A HoverResult is the markdown shown for an identifier.
@@ -34,17 +35,10 @@ func Hover(f *ParsedFile, ix *Index, offset int) *HoverResult {
 	}
 	md := r.describe(targets[0])
 	if n := len(targets) - 1; n > 0 {
-		md += fmt.Sprintf("\n\n_+%d other %s_", n, plural(n, "candidate", "candidates"))
+		md += fmt.Sprintf("\n\n_+%d other %s_", n, textutil.Plural(n, "candidate", "candidates"))
 	}
 	rng, _ := f.Mapper.OffsetRange(int(id.StartByte()), int(id.EndByte()))
 	return &HoverResult{Markdown: md, Range: rng}
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }
 
 // describe renders a target as markdown.

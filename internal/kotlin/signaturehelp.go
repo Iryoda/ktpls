@@ -3,9 +3,9 @@ package kotlin
 import (
 	"regexp"
 	"strings"
-	"unicode/utf16"
 
 	"github.com/Iryoda/ktpls/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/util/textutil"
 )
 
 // SignatureHelp describes the call whose argument list encloses offset:
@@ -77,7 +77,7 @@ func signatureInfo(fn *Symbol, arg int, named string) (protocol.SignatureInforma
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		start := utf16Len(b.String())
+		start := uint32(textutil.UTF16Len(b.String()))
 		if p.Vararg {
 			b.WriteString("vararg ")
 		}
@@ -85,7 +85,7 @@ func signatureInfo(fn *Symbol, arg int, named string) (protocol.SignatureInforma
 		if p.Type != "" {
 			b.WriteString(": " + p.Type)
 		}
-		info.Parameters = append(info.Parameters, protocol.ParameterInformation{Label: [2]uint32{start, utf16Len(b.String())}})
+		info.Parameters = append(info.Parameters, protocol.ParameterInformation{Label: [2]uint32{start, uint32(textutil.UTF16Len(b.String()))}})
 		switch {
 		case named != "" && p.Name == named:
 			active = i
@@ -107,8 +107,6 @@ func signatureInfo(fn *Symbol, arg int, named string) (protocol.SignatureInforma
 	}
 	return info, active
 }
-
-func utf16Len(s string) uint32 { return uint32(len(utf16.Encode([]rune(s)))) }
 
 var namedArgRE = regexp.MustCompile(`^\s*([\p{L}_][\p{L}\p{Nd}_]*)\s*=[^=]`)
 

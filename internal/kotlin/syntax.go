@@ -7,12 +7,14 @@
 package kotlin
 
 import (
+	"slices"
 	"strings"
 
 	tskotlin "github.com/fwcd/tree-sitter-kotlin/bindings/go"
 	ts "github.com/tree-sitter/go-tree-sitter"
 
 	"github.com/Iryoda/ktpls/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/util/textutil"
 )
 
 var language = ts.NewLanguage(tskotlin.Language())
@@ -186,22 +188,33 @@ func declaredTypeText(n *ts.Node, src []byte) string {
 }
 
 func typeTextOfNode(t *ts.Node, src []byte) string {
-	s := collapseSpace(text(t, src))
+	s := textutil.CollapseSpace(text(t, src))
 	for _, r := range []struct{ old, new string }{{"< ", "<"}, {" >", ">"}, {" ,", ","}, {"( ", "("}, {" )", ")"}} {
 		s = strings.ReplaceAll(s, r.old, r.new)
 	}
 	return s
 }
 
-// joinFQ joins a qualifier and a name with a dot.
-func joinFQ(qual, name string) string {
-	if qual == "" {
-		return name
+// innermost returns the innermost node of one of kinds containing off.
+func innermost(tree *ts.Tree, off int, kinds ...string) *ts.Node {
+	for n := tree.RootNode().NamedDescendantForByteRange(uint(off), uint(off)); n != nil; n = n.Parent() {
+		if slices.Contains(kinds, n.Kind()) {
+			return n
+		}
 	}
-	return qual + "." + name
+	return nil
 }
 
-// lastSegment returns the part of a dotted name after its last dot.
-func lastSegment(fq string) string {
-	return fq[strings.LastIndexByte(fq, '.')+1:]
+// namedChildren returns the named children of n that aren't comments;
+// ok is false if n has a comment among its children.
+func namedChildren(n *ts.Node) (out []*ts.Node, ok bool) {
+	for _, c := range children(n) {
+		switch {
+		case c.Kind() == "line_comment" || c.Kind() == "multiline_comment":
+			return nil, false
+		case c.IsNamed():
+			out = append(out, c)
+		}
+	}
+	return out, true
 }

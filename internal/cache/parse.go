@@ -10,6 +10,7 @@ import (
 
 	"github.com/Iryoda/ktpls/internal/kotlin"
 	"github.com/Iryoda/ktpls/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/util/textutil"
 )
 
 // A File is one version of a Kotlin source file known to the session.
@@ -106,13 +107,13 @@ func (sn *Snapshot) FilesContaining(name string, fn func(*kotlin.ParsedFile)) {
 		wg.Go(func() {
 			for f := range work {
 				if f.Tree != nil {
-					if kotlin.ContainsWord(f.Content, name) {
+					if textutil.ContainsWord(f.Content, name) {
 						fn(&kotlin.ParsedFile{Path: f.Path, URI: f.URI, Content: f.Content, Tree: f.Tree, Mapper: f.Mapper, Summary: f.Summary})
 					}
 					continue
 				}
 				content, err := os.ReadFile(f.Path)
-				if err != nil || !kotlin.ContainsWord(content, name) {
+				if err != nil || !textutil.ContainsWord(content, name) {
 					continue
 				}
 				tree := kotlin.Parse(content)

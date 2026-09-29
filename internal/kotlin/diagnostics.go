@@ -6,6 +6,7 @@ import (
 	ts "github.com/tree-sitter/go-tree-sitter"
 
 	"github.com/Iryoda/ktpls/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/util/textutil"
 )
 
 // A SyntaxError is a region the parser couldn't make sense of.
@@ -50,12 +51,12 @@ func SyntaxErrors(f *ParsedFile) []SyntaxError {
 			rng, _ := f.Mapper.OffsetRange(start, max(lineEnd, start))
 			msg := "syntax error"
 			if first := firstToken(n); first != nil && first.EndByte() > first.StartByte() {
-				msg = fmt.Sprintf("syntax error near `%s`", truncate(collapseSpace(text(first, f.Content)), 30))
+				msg = fmt.Sprintf("syntax error near `%s`", textutil.Truncate(textutil.CollapseSpace(text(first, f.Content)), 30))
 			}
 			out = append(out, SyntaxError{
 				Range:   rng,
 				Message: msg,
-				Key:     "error:" + truncate(collapseSpace(string(f.Content[start:end])), maxKeyText),
+				Key:     "error:" + textutil.Truncate(textutil.CollapseSpace(string(f.Content[start:end])), maxKeyText),
 			})
 			return // one report per region
 		}
@@ -70,7 +71,7 @@ func SyntaxErrors(f *ParsedFile) []SyntaxError {
 // contextKey describes the surroundings of a zero-width error.
 func contextKey(src []byte, off int) string {
 	lo, hi := max(0, off-40), min(len(src), off+40)
-	return collapseSpace(string(src[lo:hi]))
+	return textutil.CollapseSpace(string(src[lo:hi]))
 }
 
 func firstToken(n *ts.Node) *ts.Node {
@@ -78,13 +79,6 @@ func firstToken(n *ts.Node) *ts.Node {
 		n = n.Child(0)
 	}
 	return n
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
 }
 
 // NewSyntaxErrors returns the errors in current that are not in baseline

@@ -446,25 +446,6 @@ func (r *resolver) resolveTypeName(name string, sum *FileSummary, container stri
 	return nil
 }
 
-func cut(name string) (first, rest string, ok bool) {
-	for i := 0; i < len(name); i++ {
-		if name[i] == '.' {
-			return name[:i], name[i+1:], true
-		}
-	}
-	return name, "", false
-}
-
-// parentFQ returns the qualifier of a dotted name ("" if none).
-func parentFQ(fq string) string {
-	for i := len(fq) - 1; i >= 0; i-- {
-		if fq[i] == '.' {
-			return fq[:i]
-		}
-	}
-	return ""
-}
-
 // resolveTypeUse resolves a type_identifier in a type (user_type), where
 // earlier identifiers qualify later ones: in `a.b.C`, C is looked up in a.b.
 func (r *resolver) resolveTypeUse(id *ts.Node, name string) []target {
@@ -495,14 +476,6 @@ func (r *resolver) resolveTypeUse(id *ts.Node, name string) []target {
 		}
 	}
 	return symbolTargets(r.fallback(name, true))
-}
-
-func joinAll(parts []string) string {
-	out := ""
-	for _, p := range parts {
-		out = joinFQ(out, p)
-	}
-	return out
 }
 
 // containerAt returns the FQName of the innermost container enclosing n.

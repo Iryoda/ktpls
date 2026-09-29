@@ -4,34 +4,17 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/Iryoda/ktpls/internal/util/textutil"
 )
 
 // filesOf serves a fixed set of parsed files as a FileSource.
 func filesOf(files map[string]*ParsedFile) FileSource {
 	return func(name string, fn func(*ParsedFile)) {
 		for _, f := range files {
-			if ContainsWord(f.Content, name) {
+			if textutil.ContainsWord(f.Content, name) {
 				fn(f)
 			}
-		}
-	}
-}
-
-func TestContainsWord(t *testing.T) {
-	for _, tt := range []struct {
-		content, name string
-		want          bool
-	}{
-		{"val id = 1", "id", true},
-		{"valid", "id", false},
-		{"idx id", "id", true},
-		{"x.id()", "id", true},
-		{"_id", "id", false},
-		{"id", "id", true},
-		{"", "id", false},
-	} {
-		if got := ContainsWord([]byte(tt.content), tt.name); got != tt.want {
-			t.Errorf("ContainsWord(%q, %q) = %v", tt.content, tt.name, got)
 		}
 	}
 }

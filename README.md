@@ -31,9 +31,14 @@ Supported:
   parameter (by position, or by name for `name = `), and KDoc.
 - **Go to type definition**: the declaration of a value's type
   (`List<Account>` goes to `Account`).
-- **Code actions**: add parameter names to a call's arguments
-  (`f(a, b)` → `f(x = a, y = b)`), and import an unresolved name declared
-  in another workspace package (classes, functions, extensions).
+- **Code actions**:
+  - add parameter names to a call's arguments (`f(a, b)` → `f(x = a, y = b)`);
+  - import an unresolved name declared in another workspace package;
+  - go to test / go to tested class;
+  - convert to expression body / block body;
+  - specify type explicitly (adds the imports it needs);
+  - add / remove braces of `if`, `for`, `while` and `when` branches;
+  - convert string concatenation to a template.
 - **Document outline** and **workspace symbol search**.
 - **Syntax errors** as warnings while you edit. Only errors introduced
   since the file was opened are reported, so parser gaps on valid code
@@ -120,6 +125,8 @@ logfile.
 | `internal/server` | One file per LSP feature, thin adapters (`gopls/internal/server`) |
 | `internal/cache` | Session, editor overlays, parsed files (`gopls/internal/cache`) |
 | `internal/kotlin` | Kotlin language logic (`gopls/internal/golang`) |
+| `internal/fuzzy` | Fuzzy matching for completion (`gopls/internal/fuzzy`) |
+| `internal/util/textutil` | Shared text helpers: lines, indentation, identifiers, UTF-16 (`gopls/internal/util`) |
 | `tools/tsdump` | Dev tool: print a file's syntax tree (`go run ./tools/tsdump File.kt`) |
 
 ## License and credits
