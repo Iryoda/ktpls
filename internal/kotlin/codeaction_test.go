@@ -158,3 +158,52 @@ class Controller(private val service: Service) {
 		t.Errorf("checked %d cursor positions, want 21", checked)
 	}
 }
+
+func TestAddImport(t *testing.T) {
+	ix := NewIndex()
+	for path, src := range map[string]string{
+		"/w/a/Money.kt":  "package a.money\n\nclass Money(val cents: Long)\n\nfun String.shout() = this\n",
+		"/w/b/Money.kt":  "package b.money\n\nclass Money\n",
+		"/w/c/Helper.kt": "package c\n\nfun helper() = 1\n\nclass Holder {\n    fun helper() = 2\n}\n",
+	} {
+		f, _ := parseOne(t, path, src)
+		ix.Update(f.Summary)
+	}
+	f, _ := parseOne(t, "/w/app/App.kt", `package app
+
+import c.Holder
+
+fun f(s: String): Money {
+    helper()
+    s.shout()
+    return Holder().helper()
+}
+`)
+	ix.Update(f.Summary)
+	titles := func(needle string) []string {
+		var out []string
+		for _, a := range CodeActions(f, ix, strings.Index(string(f.Content), needle)) {
+			if a.Kind == protocol.QuickFix {
+				out = append(out, a.Title)
+			}
+		}
+		return out
+	}
+	if got := titles("Money {"); !slices.Equal(got, []string{"Import `a.money.Money`", "Import `b.money.Money`"}) {
+		t.Errorf("Money: %v", got)
+	}
+	if got := titles("helper()\n    s"); !slices.Equal(got, []string{"Import `c.helper`"}) {
+		t.Errorf("helper: %v", got) // the member Holder.helper is not importable
+	}
+	if got := titles("shout()"); !slices.Equal(got, []string{"Import `a.money.shout`"}) {
+		t.Errorf("extension: %v", got)
+	}
+	if got := titles("Holder()"); len(got) != 0 {
+		t.Errorf("already imported: %v", got)
+	}
+	// The edit goes after the last import.
+	a := CodeActions(f, ix, strings.Index(string(f.Content), "Money {"))[0]
+	if e := a.Edits[0]; e.NewText != "\nimport a.money.Money" || e.Range.Start != (protocol.Position{Line: 2, Character: 15}) {
+		t.Errorf("edit: %+v", e)
+	}
+}

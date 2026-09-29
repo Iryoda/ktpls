@@ -31,8 +31,9 @@ Supported:
   parameter (by position, or by name for `name = `), and KDoc.
 - **Go to type definition**: the declaration of a value's type
   (`List<Account>` goes to `Account`).
-- **Code action**: add parameter names to a call's arguments
-  (`f(a, b)` → `f(x = a, y = b)`).
+- **Code actions**: add parameter names to a call's arguments
+  (`f(a, b)` → `f(x = a, y = b)`), and import an unresolved name declared
+  in another workspace package (classes, functions, extensions).
 - **Document outline** and **workspace symbol search**.
 - **Syntax errors** as warnings while you edit. Only errors introduced
   since the file was opened are reported, so parser gaps on valid code

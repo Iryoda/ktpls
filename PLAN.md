@@ -26,7 +26,8 @@ Tree-sitter gives syntax only (no `go/types` equivalent for Kotlin exists in Go)
 - **Rename — done.** `textDocument/prepareRename` + `textDocument/rename` on top of references: override families (up through supertypes, down through implementations), import aliases kept, named arguments follow parameters; refuses library symbols, keywords, `it`, ambiguous targets and invalid names.
 - **Signature help — done.** The call is found in the text (innermost unclosed `(`, skipping strings, stopping at lambdas), resolved like definition; active parameter by comma count or by `name =`; overloads listed, the first fitting one active; varargs absorb trailing arguments.
 - **Type definition — done.** The type of a value (declared or inferred, `it` included); library types yield the workspace types among their arguments.
-- Remaining ideas: "add import" code action; nested `.gitignore` files and negations; incremental text sync.
+- **"Add import" code action — done.** Offered when the name under the cursor doesn't resolve to anything visible from the file (a local, a member of the receiver or an enclosing class, or a same-package/imported top-level declaration) and a top-level declaration of that name exists in another workspace package; after a dot, only extensions.
+- Remaining ideas: nested `.gitignore` files and negations; incremental text sync.
 
 ## Key design decisions
 

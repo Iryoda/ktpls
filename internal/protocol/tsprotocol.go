@@ -202,7 +202,10 @@ type WorkspaceEdit struct {
 }
 
 // Code action kinds.
-const RefactorRewrite = "refactor.rewrite"
+const (
+	QuickFix        = "quickfix"
+	RefactorRewrite = "refactor.rewrite"
+)
 
 type SignatureHelpOptions struct {
 	TriggerCharacters   []string `json:"triggerCharacters,omitempty"`

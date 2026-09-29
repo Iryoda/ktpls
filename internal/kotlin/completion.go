@@ -459,23 +459,8 @@ func sameFirstRune(a, b string) bool {
 	return unicode.ToLower(ra) == unicode.ToLower(rb)
 }
 
-// importEdit returns an edit adding `import fq` after the file's last
-// import (or its package header).
-func (c *completer) importEdit(fq string) protocol.TextEdit {
-	root := c.f.Tree.RootNode()
-	var at int
-	newText := "import " + fq + "\n"
-	if list := child(root, "import_list"); list != nil {
-		headers := childrenOf(list, "import_header")
-		if len(headers) > 0 {
-			at, newText = int(headers[len(headers)-1].EndByte()), "\nimport "+fq
-		}
-	} else if pkg := child(root, "package_header"); pkg != nil {
-		at, newText = int(pkg.EndByte()), "\n\nimport "+fq
-	}
-	pos, _ := c.f.Mapper.OffsetPosition(at)
-	return protocol.TextEdit{Range: protocol.Range{Start: pos, End: pos}, NewText: newText}
-}
+// importEdit returns an edit adding `import fq` to the file.
+func (c *completer) importEdit(fq string) protocol.TextEdit { return importEdit(c.f, fq) }
 
 // typePosition reports whether the identifier starting at start follows a
 // colon (a type annotation or supertype list), where only types fit.
