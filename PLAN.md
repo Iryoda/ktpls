@@ -16,7 +16,8 @@ Tree-sitter gives syntax only (no `go/types` equivalent for Kotlin exists in Go)
 - **M0 — done.** stdio JSON-RPC, lifecycle, document sync, workspace load; verified in Neovim 0.12.
 - **M1 — done.** `textDocument/definition`. On a 2,671-file production Kotlin service: workspace load 0.26–0.44 s, ~144 MB RSS; definition averages ~25 µs in-process, 0.06 ms round trip from Neovim. For names that exist in the workspace: 76% resolve to exactly one location (types 99%, named arguments 95%, member access 71%), 3.6% to more than 5.
 - **M2 — done.** `textDocument/hover`: signature rebuilt from the syntax tree (annotations and bodies dropped, defaults elided to `= …`, long parameter lists wrapped), declaring container/package, KDoc rendered to markdown (`@param`/`@property`/`@return`/`@throws`/`@see` sections, `[links]` as code). Signatures and docs are precomputed at extraction, since disk files keep no tree. Same corpus: ~24 µs per hover, 0.07 ms round trip from Neovim; RSS ~115 MB.
-- Next: M3 (completion), then M1.5 (syntax diagnostics).
+- **M3 — done.** `textDocument/completion`: dot-member completion (typed receivers, inherited members, extensions, companion/enum entries via a type name, `also`/`apply` returning the receiver; nothing for unknown receivers), locals nearest-first, enclosing-class members, same-package and imported symbols, named arguments `name =`, keywords, and unimported workspace symbols with an auto-import edit. Ranked by tier then fuzzy score. Pulled dot-completion forward from M4 since M1's receiver typing made it cheap. Measured by simulated typing (identifier truncated to its first characters, rest of line removed) on the same corpus: the intended name is offered 96% of the time after 2 characters (83% in the top 5), 93% right after a dot; ~0.9 ms per request in-process, 0.15 ms round trip from Neovim.
+- Next: M1.5 (syntax diagnostics), then M4.
 
 ## Key design decisions
 
@@ -96,7 +97,7 @@ Makefile                         # build/test/install with CGO_ENABLED=1
 ### M4 — Later capabilities
 1. **documentSymbol / workspaceSymbol** (if not already pulled into M3).
 2. **textDocument/implementation:** classes whose transitive `supertypesOf` set contains the target interface/class; for a member, same-name `override` functions in those classes.
-3. **Dot-member completion heuristic:** receiver = identifier resolving to a binding with an explicit type annotation (or `this` / object name) → `membersOf[typeFQ]` + supertype members.
+3. ~~**Dot-member completion heuristic:**~~ (done in M3) receiver = identifier resolving to a binding with an explicit type annotation (or `this` / object name) → `membersOf[typeFQ]` + supertype members.
 4. **references:** query all matching `simple_identifier`s, filter by running resolution at each and comparing to target.
 5. Honor `.gitignore` in the workspace walk (today: a fixed list of build-output dirs — `build`, `out`, `bin`, `target`, `node_modules` — plus hidden dirs).
 6. Incremental text sync + `Tree.Edit` reparse (with debug full-reparse s-expression comparison in tests).

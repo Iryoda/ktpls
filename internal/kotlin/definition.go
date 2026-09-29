@@ -191,6 +191,10 @@ func (r *resolver) resolveName(use *ts.Node, name string, typesOnly bool) []targ
 	return symbolTargets(r.fallback(name, typesOnly))
 }
 
+// returnsReceiver are the standard library functions that return their
+// receiver: `x.also { }` is x.
+var returnsReceiver = map[string]bool{"also": true, "apply": true, "takeIf": true, "takeUnless": true}
+
 // scopeFunctions are the standard library functions whose lambda argument
 // has the call's receiver (or, for with, its first argument) as its
 // implicit receiver.
@@ -728,31 +732,39 @@ func (r *resolver) resolveNamedArgument(arg *ts.Node, name string) []target {
 		callees = symbolTargets(r.resolveTypeName(typeName(callee, r.src), r.f.Summary, r.containerAt(callee)))
 	}
 	var out []target
+	for _, fn := range r.callables(callees) {
+		for _, p := range fn.Params {
+			if p.Name == name {
+				out = append(out, target{
+					param:      &protocol.Location{URI: fn.URI, Range: p.SelectionRange},
+					paramInfo:  p,
+					paramOwner: fn,
+				})
+			}
+		}
+	}
+	return out
+}
+
+// callables maps resolved callees to the declarations whose parameters a
+// call binds: functions and constructors, including the primary and
+// secondary constructors of a class being instantiated.
+func (r *resolver) callables(callees []target) []*Symbol {
+	var fns []*Symbol
 	for _, c := range callees {
 		if c.sym == nil {
 			continue
 		}
-		fns := []*Symbol{c.sym}
-		if c.sym.Kind.IsType() { // constructor call: primary and secondary constructors
+		fns = append(fns, c.sym)
+		if c.sym.Kind.IsType() {
 			for _, m := range r.ix.Members(c.sym.FQName) {
 				if m.Kind == KindConstructor {
 					fns = append(fns, m)
 				}
 			}
 		}
-		for _, fn := range fns {
-			for _, p := range fn.Params {
-				if p.Name == name {
-					out = append(out, target{
-						param:      &protocol.Location{URI: fn.URI, Range: p.SelectionRange},
-						paramInfo:  p,
-						paramOwner: fn,
-					})
-				}
-			}
-		}
 	}
-	return out
+	return fns
 }
 
 // maxTypeDepth bounds receiver-type resolution through chains like a.b.c.
@@ -793,6 +805,10 @@ func (r *resolver) typesOf(expr *ts.Node, depth int) []*Symbol {
 		}
 		return out
 	case "call_expression":
+		// x.also { } returns x.
+		if name, recv := callee(expr); name != nil && recv != nil && returnsReceiver[text(name, r.src)] {
+			return r.typesOf(recv, depth+1)
+		}
 		// f() has f's return type; Foo() constructs a Foo.
 		return r.typesOf(expr.NamedChild(0), depth+1)
 	}

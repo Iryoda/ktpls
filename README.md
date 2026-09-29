@@ -6,7 +6,7 @@ with [tree-sitter](https://tree-sitter.github.io/) and resolves symbols
 across the `.kt`/`.kts` files of your workspace. There is no JVM and no
 Gradle import.
 
-See [PLAN.md](PLAN.md) for the roadmap. Status: **M2 (hover)**.
+See [PLAN.md](PLAN.md) for the roadmap. Status: **M3 (completion)**.
 Supported:
 
 - **Go to definition** (`gd`) across the workspace, covering locals,
@@ -14,8 +14,11 @@ Supported:
   arguments, and `apply`/`run`/`with` receivers.
 - **Hover** (`K`): the declaration's signature, where it's declared, and
   its KDoc rendered as markdown.
-
-Completion is next.
+- **Completion**: members after `.` (including inherited members,
+  extensions, and companion members or enum entries through a type name),
+  locals, enclosing-class members, named arguments (`name =`), keywords,
+  and workspace declarations that aren't imported yet (accepting one adds
+  the `import`).
 
 Resolution is syntax- and scope-based (there is no type checker), and
 limited to the workspace's own `.kt`/`.kts` files. It does not reach the
@@ -44,7 +47,19 @@ vim.lsp.config('kt_vibe_lsp', {
   root_markers = { 'settings.gradle.kts', 'settings.gradle', 'build.gradle.kts', 'build.gradle', '.git' },
 })
 vim.lsp.enable('kt_vibe_lsp')
+
+-- Optional: Neovim's built-in completion, triggered as you type.
+vim.api.nvim_create_autocmd('LspAttach', {
+  callback = function(args)
+    local client = vim.lsp.get_client_by_id(args.data.client_id)
+    if client and client.name == 'kt_vibe_lsp' then
+      vim.lsp.completion.enable(true, client.id, args.buf, { autotrigger = true })
+    end
+  end,
+})
 ```
+
+nvim-cmp and blink.cmp work too, through their LSP sources.
 
 Neovim 0.10:
 

@@ -15,64 +15,73 @@ type local struct {
 // findLocal searches the lexical scopes enclosing use, innermost first, for
 // a declaration of name.
 func findLocal(use *ts.Node, name string, src []byte) *local {
-	for scope, inner := use.Parent(), use; scope != nil; scope, inner = scope.Parent(), scope {
-		if l := searchScope(scope, inner, use, name, src); l != nil {
-			return l
+	var found *local
+	visibleLocals(use, use.StartByte(), src, func(l local) bool {
+		if text(l.name, src) == name {
+			found = &l
+			return false
 		}
-	}
-	return nil
+		return true
+	})
+	return found
 }
 
-// searchScope looks for name among the declarations that node scope
-// introduces and that are visible at use. inner is the child of scope that
-// contains use.
-func searchScope(scope, inner, use *ts.Node, name string, src []byte) *local {
-	match := func(id, decl *ts.Node) *local {
-		if id != nil && text(id, src) == name {
-			return &local{name: id, decl: decl}
+// visibleLocals calls yield for each local declaration visible at offset
+// pos, which lies in node n (n itself may be a scope), innermost
+// (shadowing) first, until yield returns false.
+func visibleLocals(n *ts.Node, pos uint, src []byte, yield func(local) bool) {
+	for scope := n; scope != nil; scope = scope.Parent() {
+		if !scopeLocals(scope, pos, yield) {
+			return
 		}
-		return nil
+	}
+}
+
+// contains reports whether offset pos lies within n.
+func contains(n *ts.Node, pos uint) bool { return n.StartByte() <= pos && pos < n.EndByte() }
+
+// scopeLocals yields the declarations that node scope introduces and that
+// are visible at pos, nearest first. It returns false if yield stopped the
+// iteration.
+func scopeLocals(scope *ts.Node, pos uint, yield func(local) bool) bool {
+	emit := func(id, decl *ts.Node) bool {
+		if id == nil {
+			return true
+		}
+		return yield(local{name: id, decl: decl})
 	}
 	switch scope.Kind() {
-	case "function_declaration", "secondary_constructor", "anonymous_function", "setter":
-		if params := child(scope, "function_value_parameters", "parameter_with_optional_type"); params != nil {
+	case "function_declaration", "secondary_constructor", "anonymous_function":
+		if params := child(scope, "function_value_parameters"); params != nil {
 			for _, p := range childrenOf(params, "parameter") {
-				if l := match(child(p, "simple_identifier"), p); l != nil {
-					return l
+				if !emit(child(p, "simple_identifier"), p) {
+					return false
 				}
 			}
 		}
-		if l := typeParameter(scope, name, src); l != nil {
-			return l
-		}
-		// Setters: `set(value) { ... }` has a bare parameter.
-		if scope.Kind() == "setter" {
-			if p := child(scope, "parameter_with_optional_type"); p != nil {
-				return match(child(p, "simple_identifier"), p)
-			}
+		return typeParameters(scope, yield)
+
+	case "setter":
+		// set(value) { ... }
+		if p := child(scope, "parameter_with_optional_type"); p != nil {
+			return emit(child(p, "simple_identifier"), p)
 		}
 
 	case "lambda_literal":
 		if params := child(scope, "lambda_parameters"); params != nil {
-			if l := searchVariables(params, name, src); l != nil {
-				return l
-			}
+			return variables(params, yield)
 		}
 
 	case "for_statement":
-		if l := searchVariables(scope, name, src); l != nil {
-			return l
-		}
+		return variables(scope, yield)
 
 	case "catch_block":
 		// catch (e: Exception) { ... }
-		return match(child(scope, "simple_identifier"), scope)
+		return emit(child(scope, "simple_identifier"), scope)
 
 	case "when_expression":
 		if subj := child(scope, "when_subject"); subj != nil {
-			if l := searchVariables(subj, name, src); l != nil {
-				return l
-			}
+			return variables(subj, yield)
 		}
 
 	case "class_declaration":
@@ -80,71 +89,82 @@ func searchScope(scope, inner, use *ts.Node, name string, src []byte) *local {
 		// initializers (val/var parameters are also members).
 		if pc := child(scope, "primary_constructor"); pc != nil {
 			for _, p := range childrenOf(pc, "class_parameter") {
-				if l := match(child(p, "simple_identifier"), p); l != nil {
-					return l
+				if !emit(child(p, "simple_identifier"), p) {
+					return false
 				}
 			}
 		}
-		if l := typeParameter(scope, name, src); l != nil {
-			return l
-		}
+		return typeParameters(scope, yield)
 
-	case "statements", "source_file":
-		// Declarations earlier in the block. Search backwards so the
-		// nearest (shadowing) declaration wins. Skip the statement that
-		// contains the use: in `val x = x + 1` the right-hand x is outer.
-		if scope.Kind() == "source_file" {
-			return nil // top-level declarations are in the index
-		}
+	case "statements", "ERROR":
+		// Declarations earlier in the block, nearest first. Skip the
+		// statement that contains pos: in `val x = x + 1` the right-hand
+		// x is outer.
+		//
+		// An ERROR node is a scope too: recovery may flatten a function
+		// into it (`fun f(s: String) = s.` with the parameters as a
+		// sibling of the use).
 		for i := int(scope.ChildCount()) - 1; i >= 0; i-- {
 			stmt := scope.Child(uint(i))
-			if stmt.StartByte() >= use.StartByte() || stmt.Equals(*inner) {
+			if stmt.StartByte() >= pos || contains(stmt, pos) {
+				continue
+			}
+			if scope.Kind() == "ERROR" && stmt.Kind() == "function_value_parameters" {
+				for _, p := range childrenOf(stmt, "parameter") {
+					if !emit(child(p, "simple_identifier"), p) {
+						return false
+					}
+				}
 				continue
 			}
 			switch stmt.Kind() {
 			case "property_declaration":
-				if l := searchVariables(stmt, name, src); l != nil {
-					return l
+				if !variables(stmt, yield) {
+					return false
 				}
 			case "function_declaration":
-				if l := match(child(stmt, "simple_identifier"), stmt); l != nil {
-					return l
+				if !emit(child(stmt, "simple_identifier"), stmt) {
+					return false
 				}
 			case "class_declaration", "object_declaration":
-				if l := match(child(stmt, "type_identifier"), stmt); l != nil {
-					return l
+				if !emit(child(stmt, "type_identifier"), stmt) {
+					return false
 				}
 			}
 		}
 	}
-	return nil
+	return true
 }
 
-// searchVariables finds name among variable_declaration children of n,
-// including destructuring declarations.
-func searchVariables(n *ts.Node, name string, src []byte) *local {
+// variables yields the variable_declaration children of n, including
+// destructuring declarations.
+func variables(n *ts.Node, yield func(local) bool) bool {
 	vars := childrenOf(n, "variable_declaration")
 	if mv := child(n, "multi_variable_declaration"); mv != nil {
 		vars = append(vars, childrenOf(mv, "variable_declaration")...)
 	}
 	for _, v := range vars {
-		if id := child(v, "simple_identifier"); id != nil && text(id, src) == name {
-			return &local{name: id, decl: v}
+		if id := child(v, "simple_identifier"); id != nil {
+			if !yield(local{name: id, decl: v}) {
+				return false
+			}
 		}
 	}
-	return nil
+	return true
 }
 
-// typeParameter finds a type parameter <name> declared by decl.
-func typeParameter(decl *ts.Node, name string, src []byte) *local {
+// typeParameters yields the type parameters <T, ...> declared by decl.
+func typeParameters(decl *ts.Node, yield func(local) bool) bool {
 	tps := child(decl, "type_parameters")
 	if tps == nil {
-		return nil
+		return true
 	}
 	for _, tp := range childrenOf(tps, "type_parameter") {
-		if id := child(tp, "type_identifier"); id != nil && text(id, src) == name {
-			return &local{name: id, decl: tp}
+		if id := child(tp, "type_identifier"); id != nil {
+			if !yield(local{name: id, decl: tp}) {
+				return false
+			}
 		}
 	}
-	return nil
+	return true
 }

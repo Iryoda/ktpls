@@ -98,6 +98,7 @@ type ServerCapabilities struct {
 	TextDocumentSync   *TextDocumentSyncOptions `json:"textDocumentSync,omitempty"`
 	DefinitionProvider bool                     `json:"definitionProvider,omitempty"`
 	HoverProvider      bool                     `json:"hoverProvider,omitempty"`
+	CompletionProvider *CompletionOptions       `json:"completionProvider,omitempty"`
 }
 
 type TextDocumentSyncKind int
@@ -167,6 +168,77 @@ const (
 type MarkupContent struct {
 	Kind  MarkupKind `json:"kind"`
 	Value string     `json:"value"`
+}
+
+type TextEdit struct {
+	Range   Range  `json:"range"`
+	NewText string `json:"newText"`
+}
+
+type CompletionOptions struct {
+	TriggerCharacters []string `json:"triggerCharacters,omitempty"`
+	ResolveProvider   bool     `json:"resolveProvider"`
+}
+
+type CompletionTriggerKind int
+
+const (
+	CompletionInvoked                         CompletionTriggerKind = 1
+	CompletionTriggerCharacter                CompletionTriggerKind = 2
+	CompletionTriggerForIncompleteCompletions CompletionTriggerKind = 3
+)
+
+type CompletionContext struct {
+	TriggerKind      CompletionTriggerKind `json:"triggerKind"`
+	TriggerCharacter string                `json:"triggerCharacter,omitempty"`
+}
+
+type CompletionParams struct {
+	TextDocumentPositionParams
+	Context *CompletionContext `json:"context,omitempty"`
+}
+
+type CompletionList struct {
+	IsIncomplete bool             `json:"isIncomplete"`
+	Items        []CompletionItem `json:"items"`
+}
+
+type CompletionItemKind int
+
+const (
+	CompletionKindText          CompletionItemKind = 1
+	CompletionKindMethod        CompletionItemKind = 2
+	CompletionKindFunction      CompletionItemKind = 3
+	CompletionKindConstructor   CompletionItemKind = 4
+	CompletionKindField         CompletionItemKind = 5
+	CompletionKindVariable      CompletionItemKind = 6
+	CompletionKindClass         CompletionItemKind = 7
+	CompletionKindInterface     CompletionItemKind = 8
+	CompletionKindModule        CompletionItemKind = 9
+	CompletionKindProperty      CompletionItemKind = 10
+	CompletionKindEnum          CompletionItemKind = 13
+	CompletionKindKeyword       CompletionItemKind = 14
+	CompletionKindEnumMember    CompletionItemKind = 20
+	CompletionKindConstant      CompletionItemKind = 21
+	CompletionKindStruct        CompletionItemKind = 22
+	CompletionKindTypeParameter CompletionItemKind = 25
+)
+
+type CompletionItemLabelDetails struct {
+	Detail      string `json:"detail,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type CompletionItem struct {
+	Label               string                      `json:"label"`
+	LabelDetails        *CompletionItemLabelDetails `json:"labelDetails,omitempty"`
+	Kind                CompletionItemKind          `json:"kind,omitempty"`
+	Detail              string                      `json:"detail,omitempty"`
+	Documentation       *MarkupContent              `json:"documentation,omitempty"`
+	SortText            string                      `json:"sortText,omitempty"`
+	FilterText          string                      `json:"filterText,omitempty"`
+	TextEdit            *TextEdit                   `json:"textEdit,omitempty"`
+	AdditionalTextEdits []TextEdit                  `json:"additionalTextEdits,omitempty"`
 }
 
 type Hover struct {
