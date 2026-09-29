@@ -339,3 +339,73 @@ func TestCompletionEmptyIsArray(t *testing.T) {
 		}
 	}
 }
+
+const filledSrc = `package acme.app
+
+fun generateKey(modelBrand: String, modelName: String, storageName: String, colorName: String, memoryName: String?): String = ""
+
+data class Phone(val brand: String, val model: String, val color: String)
+
+fun use(modelBrand: String, modelName: String) {
+    CALL
+}
+`
+
+func namedLabels(t *testing.T, call string) []string {
+	t.Helper()
+	_, labels := complete(t, strings.Replace(filledSrc, "CALL", call, 1))
+	var out []string
+	for _, l := range labels {
+		if strings.HasSuffix(l, " =") {
+			out = append(out, strings.TrimSuffix(l, " ="))
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+func TestCompletionSkipsFilledArguments(t *testing.T) {
+	for _, tt := range []struct {
+		call string
+		want []string
+	}{
+		// The user's case: two named, one being typed after them.
+		{"generateKey(\n        modelBrand = modelBrand,\n        modelName = modelName,\n        |\n    )", []string{"colorName", "memoryName", "storageName"}},
+		// Filled arguments after the cursor count too.
+		{"generateKey(\n        |\n        modelName = modelName,\n        colorName = \"c\",\n    )", []string{"memoryName", "modelBrand", "storageName"}},
+		// Positional arguments fill the leading parameters.
+		{"generateKey(modelBrand, modelName, |)", []string{"colorName", "memoryName", "storageName"}},
+		// The argument being typed doesn't hide its own name.
+		{"generateKey(modelBrand = modelBrand, sto|)", []string{"storageName"}},
+		// Constructors: data class properties.
+		{"Phone(brand = \"b\", |)", []string{"color", "model"}},
+		// Strings containing commas or parentheses don't confuse it.
+		{"Phone(brand = \"a, (b\", |)", []string{"color", "model"}},
+	} {
+		if got := namedLabels(t, tt.call); !slices.Equal(got, tt.want) {
+			t.Errorf("%s:\n got  %v\n want %v", tt.call, got, tt.want)
+		}
+	}
+}
+
+func TestCompletionArgumentsAreFocused(t *testing.T) {
+	// At an argument start: parameter names first; no keyword or
+	// unimported-workspace flood.
+	_, labels := complete(t, strings.Replace(filledSrc, "CALL", "Phone(brand = \"b\", mo|)", 1))
+	if len(labels) == 0 || labels[0] != "model =" {
+		t.Fatalf("first suggestion: %v", labels)
+	}
+	for _, l := range labels {
+		if slices.Contains(keywords, l) && l != "null" && l != "true" && l != "false" && l != "this" {
+			t.Errorf("keyword %q offered inside arguments: %v", l, labels)
+		}
+		if l == "Money" || l == "formatMoney" {
+			t.Errorf("unimported symbol %q offered inside arguments", l)
+		}
+	}
+	// Locals still come right after the parameter names.
+	_, labels = complete(t, strings.Replace(filledSrc, "CALL", "generateKey(mod|)", 1))
+	if !slices.Contains(labels, "modelBrand") || slices.Index(labels, "modelBrand =") > slices.Index(labels, "modelBrand") {
+		t.Errorf("order: %v", labels)
+	}
+}

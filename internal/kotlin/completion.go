@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -280,8 +281,9 @@ func (c *completer) scope(offset int) {
 	anchor := c.f.Tree.RootNode().NamedDescendantForByteRange(uint(offset), uint(offset))
 	typesOnly := typePosition(c.src, offset-len(c.prefix))
 
+	inArgs := false
 	if !typesOnly {
-		c.namedArguments(offset)
+		inArgs = c.namedArguments(offset)
 	}
 	if anchor != nil && !typesOnly {
 		visibleLocals(anchor, uint(offset), c.src, func(l local) bool {
@@ -326,8 +328,19 @@ func (c *completer) scope(offset int) {
 		}
 	}
 
-	if c.prefix == "" {
-		return // keywords and the whole workspace only once something is typed
+	// Keywords and not-yet-imported declarations only once enough is typed,
+	// and not at the start of an argument, where parameter names, locals
+	// and visible declarations are what fits.
+	if len(c.prefix) < 2 {
+		return
+	}
+	if inArgs {
+		for _, kw := range []string{"null", "true", "false", "this"} {
+			if score, ok := fuzzy.Score(c.prefix, kw); ok && sameFirstRune(c.prefix, kw) {
+				c.add(protocol.CompletionItem{Label: kw, Kind: protocol.CompletionKindKeyword}, tierKeyword, score)
+			}
+		}
+		return
 	}
 	if !typesOnly {
 		for _, kw := range keywords {
@@ -339,24 +352,67 @@ func (c *completer) scope(offset int) {
 			}
 		}
 	}
-	c.unimported(sum, typesOnly, visible)
+	if len(c.prefix) >= 3 {
+		c.unimported(sum, typesOnly, visible)
+	}
 }
 
 // namedArguments offers `name =` for the parameters of the call whose
 // argument starts at offset: `f(a = 1, na|`. The call is found in the text
 // (the innermost unclosed parenthesis), since the tree is usually broken
 // while an argument list is being typed.
-func (c *completer) namedArguments(offset int) {
+//
+// Parameters the call already passes, by name or by position, are left
+// out, as are overloads the passed names don't fit. It reports whether
+// offset starts an argument of a resolved call.
+func (c *completer) namedArguments(offset int) bool {
 	open := argumentListStart(c.src, offset)
 	if open < 0 {
-		return
+		return false
 	}
 	id := IdentifierAt(c.f.Tree, open) // the callee name ends at the paren
 	if id == nil || int(id.EndByte()) != open {
-		return
+		return false
 	}
-	for _, fn := range c.callables(c.resolve(id)) {
-		for _, p := range fn.Params {
+	fns := c.callables(c.resolve(id))
+	if len(fns) == 0 {
+		return false
+	}
+	// offset is where the identifier being typed starts.
+	args, current := callArguments(c.src, open, offset)
+	cursor := offset + len(c.prefix)
+	// Text after the cursor in the current argument belongs to an argument
+	// the user is typing in front of, with no comma yet: `f(|\n  b = 1)`.
+	after := ""
+	if end := args[current].end; end > cursor {
+		after = string(c.src[cursor:end])
+	}
+	argText := func(i int) string {
+		if i == current {
+			return after
+		}
+		return string(c.src[args[i].start:args[i].end])
+	}
+	named := map[string]bool{}
+	positional := 0
+	for i := range args {
+		a := argText(i)
+		if m := namedArgRE.FindStringSubmatch(a + " "); m != nil {
+			named[m[1]] = true
+		} else if len(named) == 0 && strings.TrimSpace(a) != "" {
+			positional++
+		}
+	}
+	seen := map[string]bool{}
+	for _, fn := range fns {
+		if !paramsCover(fn.Params, named) {
+			continue // an overload without these parameter names
+		}
+		for i, p := range fn.Params {
+			if named[p.Name] || i < positional || seen[p.Name] {
+				continue
+			}
+			seen[p.Name] = true
 			score, ok := fuzzy.Score(c.prefix, p.Name)
 			if !ok {
 				continue
@@ -374,6 +430,56 @@ func (c *completer) namedArguments(offset int) {
 			}, tierLocal, score)
 		}
 	}
+	return true
+}
+
+func paramsCover(params []Param, names map[string]bool) bool {
+	for n := range names {
+		if !slices.ContainsFunc(params, func(p Param) bool { return p.Name == n }) {
+			return false
+		}
+	}
+	return true
+}
+
+// An argSpan is one argument's text extent.
+type argSpan struct{ start, end int }
+
+// callArguments splits the argument list opened at src[open] into its
+// top-level arguments (up to the matching ")", or the end of the text
+// while it is being typed) and returns the index of the one at offset.
+func callArguments(src []byte, open, offset int) (args []argSpan, current int) {
+	depth, start := 0, open+1
+	current = -1
+	end := len(src)
+scan:
+	for k := open + 1; k < len(src); k++ {
+		switch src[k] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			if depth == 0 {
+				end = k
+				break scan
+			}
+			depth--
+		case '"':
+			k = skipString(src, k, len(src))
+		case ',':
+			if depth == 0 {
+				if start <= offset && offset <= k {
+					current = len(args)
+				}
+				args = append(args, argSpan{start, k})
+				start = k + 1
+			}
+		}
+	}
+	if current < 0 {
+		current = len(args)
+	}
+	args = append(args, argSpan{start, end})
+	return args, current
 }
 
 // argumentListStart returns the offset of the "(" opening the argument
