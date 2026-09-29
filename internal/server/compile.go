@@ -164,6 +164,7 @@ func (s *Server) compileDiagnostics(content []byte, msgs []build.Message) []prot
 		// The compiler gives a 1-based line and column (in UTF-16 code
 		// units); underline the identifier or token there.
 		off := u16.PositionOffset(protocol.Position{Line: uint32(max(msg.Line-1, 0)), Character: uint32(max(msg.Column-1, 0))})
+		off = skipAssignment(content, off)
 		rng, _ := m.OffsetRange(off, tokenEnd(content, off))
 		sev := protocol.SeverityError
 		if msg.Severity == build.Warning {
@@ -231,4 +232,20 @@ func tokenEnd(src []byte, off int) int {
 		}
 	}
 	return off + size
+}
+
+// skipAssignment moves an offset at `=` (where the compiler reports some
+// initializer errors) to the value after it, on the same line.
+func skipAssignment(src []byte, off int) int {
+	if off >= len(src) || src[off] != '=' || off+1 < len(src) && src[off+1] == '=' {
+		return off
+	}
+	i := off + 1
+	for i < len(src) && (src[i] == ' ' || src[i] == '\t') {
+		i++
+	}
+	if i < len(src) && src[i] != '\n' && src[i] != '\r' {
+		return i
+	}
+	return off
 }

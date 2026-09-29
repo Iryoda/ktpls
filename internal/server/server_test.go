@@ -486,3 +486,13 @@ func TestTokenEnd(t *testing.T) {
 		}
 	}
 }
+
+func TestSkipAssignment(t *testing.T) {
+	src := []byte(`val x: Int = "no"`)
+	if got := skipAssignment(src, 11); string(src[got:tokenEnd(src, got)]) != `"no"` {
+		t.Errorf("at =: underlines %q", src[got:tokenEnd(src, got)])
+	}
+	if got := skipAssignment([]byte("a == b"), 2); got != 2 {
+		t.Errorf("== moved to %d", got)
+	}
+}
