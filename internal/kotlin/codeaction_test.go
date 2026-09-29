@@ -106,3 +106,55 @@ func TestNameArgumentsInnermostCall(t *testing.T) {
 		t.Errorf("on outer: got %q", got)
 	}
 }
+
+func TestNameArgumentsMemberCalls(t *testing.T) {
+	src := `package p
+
+class Service {
+    fun somethingFunction(name: String, other1: List<String>) {}
+    fun self() = this
+}
+
+class Controller(private val service: Service) {
+    fun a(s: Service?, x: String, y: List<String>) {
+        s!!.somethingFunction(x, y)
+        service.somethingFunction(x, y)
+        this.service.somethingFunction(x, y)
+        s?.somethingFunction(x, y)
+        s!!
+            .somethingFunction(x, y)
+        service.self().somethingFunction(x, y)
+        unknownThing().somethingFunction(x, y)
+    }
+}
+`
+	f, ix := parseOne(t, "/w/M.kt", src)
+	const want = ".somethingFunction(name = x, other1 = y)"
+	lines := strings.Split(src, "\n")
+	off, checked := 0, 0
+	for i, line := range lines {
+		if j := strings.Index(line, ".somethingFunction(x"); j >= 0 {
+			// The cursor may be on the dot, on the name, or in the arguments.
+			for _, delta := range []int{j, j + 1, strings.Index(line, "(x") + 1} {
+				actions := CodeActions(f, ix, off+delta)
+				if len(actions) != 1 {
+					t.Errorf("line %d, column %d: %d actions", i+1, delta, len(actions))
+					continue
+				}
+				edited := line
+				for k := len(actions[0].Edits) - 1; k >= 0; k-- {
+					at := int(actions[0].Edits[k].Range.Start.Character)
+					edited = edited[:at] + actions[0].Edits[k].NewText + edited[at:]
+				}
+				if !strings.HasSuffix(edited, want) {
+					t.Errorf("line %d: got %q", i+1, strings.TrimSpace(edited))
+				}
+				checked++
+			}
+		}
+		off += len(line) + 1
+	}
+	if checked != 21 {
+		t.Errorf("checked %d cursor positions, want 21", checked)
+	}
+}
