@@ -1,0 +1,97 @@
+// Package cmd implements the kt-vibe-lsp command line.
+package cmd
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+
+	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/kt-vibe-lsp/internal/server"
+)
+
+const usage = `kt-vibe-lsp is a Kotlin language server.
+
+Usage:
+  kt-vibe-lsp [serve] [flags]   run the language server on stdin/stdout
+  kt-vibe-lsp version           print the version
+
+Flags:
+`
+
+// Main runs the command and returns the process exit code.
+func Main(args []string) int {
+	if len(args) > 0 {
+		switch args[0] {
+		case "version":
+			fmt.Println("kt-vibe-lsp", server.Version)
+			return 0
+		case "serve":
+			args = args[1:]
+		}
+	}
+
+	fs := flag.NewFlagSet("kt-vibe-lsp", flag.ContinueOnError)
+	logfile := fs.String("logfile", "", "write logs to this file (default: stderr)")
+	verbose := fs.Bool("v", false, "enable debug logging")
+	showVersion := fs.Bool("version", false, "print the version and exit")
+	fs.Usage = func() {
+		fmt.Fprint(fs.Output(), usage)
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *showVersion {
+		fmt.Println("kt-vibe-lsp", server.Version)
+		return 0
+	}
+
+	var logw io.Writer = os.Stderr
+	if *logfile != "" {
+		f, err := os.OpenFile(*logfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "kt-vibe-lsp: %v\n", err)
+			return 1
+		}
+		defer f.Close()
+		logw = f
+	}
+	level := slog.LevelInfo
+	if *verbose {
+		level = slog.LevelDebug
+	}
+	log := slog.New(slog.NewTextHandler(logw, &slog.HandlerOptions{Level: level}))
+
+	return serve(log, os.Stdin, os.Stdout)
+}
+
+// serve runs the server over r/w until the client exits. Stdout carries
+// the protocol, so nothing else may ever write to it.
+func serve(log *slog.Logger, r io.Reader, w io.Writer) int {
+	log.Info("starting", "version", server.Version, "pid", os.Getpid())
+	conn := protocol.NewConn(r, w, log)
+	srv := server.New(conn, log)
+
+	errc := make(chan error, 1)
+	go func() { errc <- conn.Run(context.Background(), srv.Handle) }()
+
+	select {
+	case <-srv.Exited():
+	case err := <-errc:
+		if err != nil {
+			log.Error("connection failed", "err", err)
+		} else {
+			log.Info("client closed the connection")
+		}
+	}
+	if srv.ShutdownReceived() {
+		log.Info("exiting")
+		return 0
+	}
+	log.Warn("exiting without shutdown")
+	return 1
+}
