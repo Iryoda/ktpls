@@ -100,12 +100,14 @@ type ServerCapabilities struct {
 	HoverProvider      bool                     `json:"hoverProvider,omitempty"`
 	CompletionProvider *CompletionOptions       `json:"completionProvider,omitempty"`
 
-	ImplementationProvider  bool           `json:"implementationProvider,omitempty"`
-	ReferencesProvider      bool           `json:"referencesProvider,omitempty"`
-	CodeActionProvider      bool           `json:"codeActionProvider,omitempty"`
-	RenameProvider          *RenameOptions `json:"renameProvider,omitempty"`
-	DocumentSymbolProvider  bool           `json:"documentSymbolProvider,omitempty"`
-	WorkspaceSymbolProvider bool           `json:"workspaceSymbolProvider,omitempty"`
+	ImplementationProvider  bool                  `json:"implementationProvider,omitempty"`
+	TypeDefinitionProvider  bool                  `json:"typeDefinitionProvider,omitempty"`
+	ReferencesProvider      bool                  `json:"referencesProvider,omitempty"`
+	CodeActionProvider      bool                  `json:"codeActionProvider,omitempty"`
+	RenameProvider          *RenameOptions        `json:"renameProvider,omitempty"`
+	SignatureHelpProvider   *SignatureHelpOptions `json:"signatureHelpProvider,omitempty"`
+	DocumentSymbolProvider  bool                  `json:"documentSymbolProvider,omitempty"`
+	WorkspaceSymbolProvider bool                  `json:"workspaceSymbolProvider,omitempty"`
 }
 
 type TextDocumentSyncKind int
@@ -161,6 +163,10 @@ type DefinitionParams struct {
 	TextDocumentPositionParams
 }
 
+type TypeDefinitionParams struct {
+	TextDocumentPositionParams
+}
+
 type ImplementationParams struct {
 	TextDocumentPositionParams
 }
@@ -197,6 +203,34 @@ type WorkspaceEdit struct {
 
 // Code action kinds.
 const RefactorRewrite = "refactor.rewrite"
+
+type SignatureHelpOptions struct {
+	TriggerCharacters   []string `json:"triggerCharacters,omitempty"`
+	RetriggerCharacters []string `json:"retriggerCharacters,omitempty"`
+}
+
+type SignatureHelpParams struct {
+	TextDocumentPositionParams
+}
+
+type SignatureHelp struct {
+	Signatures      []SignatureInformation `json:"signatures"`
+	ActiveSignature uint32                 `json:"activeSignature"`
+	ActiveParameter uint32                 `json:"activeParameter"`
+}
+
+type SignatureInformation struct {
+	Label           string                 `json:"label"`
+	Documentation   *MarkupContent         `json:"documentation,omitempty"`
+	Parameters      []ParameterInformation `json:"parameters"`
+	ActiveParameter *uint32                `json:"activeParameter,omitempty"`
+}
+
+// ParameterInformation labels a parameter by its [start, end) offsets
+// (in UTF-16 code units) within the signature label.
+type ParameterInformation struct {
+	Label [2]uint32 `json:"label"`
+}
 
 type RenameOptions struct {
 	PrepareProvider bool `json:"prepareProvider"`

@@ -21,10 +21,12 @@ type Server interface {
 
 	Definition(context.Context, *DefinitionParams) ([]Location, error)
 	Implementation(context.Context, *ImplementationParams) ([]Location, error)
+	TypeDefinition(context.Context, *TypeDefinitionParams) ([]Location, error)
 	References(context.Context, *ReferenceParams) ([]Location, error)
 	CodeAction(context.Context, *CodeActionParams) ([]CodeAction, error)
 	PrepareRename(context.Context, *PrepareRenameParams) (*PrepareRenameResult, error)
 	Rename(context.Context, *RenameParams) (*WorkspaceEdit, error)
+	SignatureHelp(context.Context, *SignatureHelpParams) (*SignatureHelp, error)
 	Hover(context.Context, *HoverParams) (*Hover, error)
 	Completion(context.Context, *CompletionParams) (*CompletionList, error)
 	DocumentSymbol(context.Context, *DocumentSymbolParams) ([]DocumentSymbol, error)
@@ -99,6 +101,13 @@ func Dispatch(ctx context.Context, s Server, method string, params json.RawMessa
 		}
 		res, err := s.Implementation(ctx, &p)
 		return res, true, err
+	case "textDocument/typeDefinition":
+		var p TypeDefinitionParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.TypeDefinition(ctx, &p)
+		return res, true, err
 	case "textDocument/references":
 		var p ReferenceParams
 		if err := unmarshalParams(params, &p); err != nil {
@@ -126,6 +135,13 @@ func Dispatch(ctx context.Context, s Server, method string, params json.RawMessa
 			return nil, true, err
 		}
 		res, err := s.Rename(ctx, &p)
+		return res, true, err
+	case "textDocument/signatureHelp":
+		var p SignatureHelpParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.SignatureHelp(ctx, &p)
 		return res, true, err
 	case "textDocument/hover":
 		var p HoverParams

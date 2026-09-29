@@ -161,7 +161,12 @@ func (r *resolver) typeOfName(id *ts.Node, depth int) typeRef {
 	case t.param != nil:
 		return typeRef{t.paramInfo.Type, r.ix.File(t.paramOwner.Path), t.paramOwner.Container}
 	}
-	decl := t.local.decl
+	return r.typeOfLocal(t.local.decl, depth)
+}
+
+// typeOfLocal infers the type of a local declaration: its annotation, its
+// lambda's parameter type, its initializer, or its loop's element type.
+func (r *resolver) typeOfLocal(decl *ts.Node, depth int) typeRef {
 	if tt := declaredTypeText(decl, r.src); tt != "" {
 		return typeRef{tt, r.f.Summary, r.containerAt(decl)}
 	}

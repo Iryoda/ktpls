@@ -27,6 +27,10 @@ Supported:
   override family (the interface declaration, every override, all uses);
   uses through an import alias keep the alias; named arguments follow a
   renamed parameter.
+- **Signature help** while typing arguments: overloads, the current
+  parameter (by position, or by name for `name = `), and KDoc.
+- **Go to type definition**: the declaration of a value's type
+  (`List<Account>` goes to `Account`).
 - **Code action**: add parameter names to a call's arguments
   (`f(a, b)` → `f(x = a, y = b)`).
 - **Document outline** and **workspace symbol search**.

@@ -24,7 +24,9 @@ Tree-sitter gives syntax only (no `go/types` equivalent for Kotlin exists in Go)
 - **M1.5 — done.** Syntax diagnostics (Warning, source `ktpls`), debounced 250 ms, reported only if new since the buffer was opened (matched by error text, so they survive line shifts). ERROR regions are underlined to the end of their first line only. On the corpus: 0 visible errors across 2,671 valid files (the grammar's one-line-body gap fails through a hidden token and reports nothing).
 - **Code action "add parameter names" — done.** On the corpus it applies to 7,892 of 7,900 member calls to workspace functions (the rest start with a vararg or have too many arguments).
 - **Rename — done.** `textDocument/prepareRename` + `textDocument/rename` on top of references: override families (up through supertypes, down through implementations), import aliases kept, named arguments follow parameters; refuses library symbols, keywords, `it`, ambiguous targets and invalid names.
-- Remaining ideas: signature help; "add import" code action; nested `.gitignore` files and negations; incremental text sync.
+- **Signature help — done.** The call is found in the text (innermost unclosed `(`, skipping strings, stopping at lambdas), resolved like definition; active parameter by comma count or by `name =`; overloads listed, the first fitting one active; varargs absorb trailing arguments.
+- **Type definition — done.** The type of a value (declared or inferred, `it` included); library types yield the workspace types among their arguments.
+- Remaining ideas: "add import" code action; nested `.gitignore` files and negations; incremental text sync.
 
 ## Key design decisions
 
