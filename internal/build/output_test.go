@@ -42,9 +42,15 @@ func TestSummarize(t *testing.T) {
 	if r := Summarize(fromCache, nil); !r.Compiled {
 		t.Errorf("from cache not reported as compiled: errors would go stale")
 	}
+	// Fixing an error back to the last compiled content: Gradle reports
+	// UP-TO-DATE and compiles nothing. The errors must go.
 	upToDate := "> Task :compileKotlin UP-TO-DATE\n> Task :compileTestKotlin UP-TO-DATE\nBUILD SUCCESSFUL\n"
-	if r := Summarize(upToDate, nil); r.Compiled {
-		t.Errorf("up to date reported as compiled")
+	if r := Summarize(upToDate, nil); !r.Compiled {
+		t.Errorf("up to date not reported as compiled: errors would go stale")
+	}
+	skipped := "> Task :compileKotlin SKIPPED\nBUILD SUCCESSFUL\n"
+	if r := Summarize(skipped, nil); r.Compiled {
+		t.Errorf("skipped reported as compiled")
 	}
 	errs := "> Task :app:compileKotlin FAILED\ne: file:///p/A.kt:2:3 Unresolved reference 'x'.\n\nFAILURE: Build failed with an exception.\n\n* What went wrong:\nExecution failed for task ':app:compileKotlin'.\n> Compilation error. See log for more details\n\n* Try:\n"
 	if r := Summarize(errs, errors.New("exit status 1")); !r.Compiled || r.Failure != "" || len(r.Messages) != 1 {

@@ -52,11 +52,12 @@ func Detect(root string) ([]string, bool) {
 // A Result is the outcome of one build.
 type Result struct {
 	Messages []Message
-	// Compiled reports whether a Kotlin compile task produced a result
-	// for changed sources: it ran, failed, or was restored from the build
-	// cache (a cached compile succeeded, so it had no errors, though its
-	// warnings aren't replayed). Up-to-date, skipped or unreached tasks
-	// say nothing new. When Compiled, the errors are the complete set.
+	// Compiled reports whether the build tells the state of the Kotlin
+	// sources: a Kotlin compile task ran, failed, was restored from the
+	// build cache, or was up to date. The latter two mean the sources
+	// match a previous *successful* compile (Gradle never takes a failed
+	// run as its baseline), so they have no errors, though their warnings
+	// aren't replayed. When Compiled, the errors are the complete set.
 	Compiled bool
 	// Failure summarizes a build failure other than compile errors (a
 	// build script error, a missing JDK); "" if none.
@@ -75,7 +76,7 @@ func Summarize(out string, err error) Result {
 	for _, line := range strings.Split(out, "\n") {
 		if m := kotlinTaskRE.FindStringSubmatch(strings.TrimRight(line, "\r")); m != nil {
 			switch m[2] {
-			case "", "FAILED", "FROM-CACHE":
+			case "", "FAILED", "FROM-CACHE", "UP-TO-DATE":
 				res.Compiled = true
 			}
 		}

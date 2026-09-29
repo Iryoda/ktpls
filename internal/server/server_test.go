@@ -446,17 +446,19 @@ func TestCompilerDiagnostics(t *testing.T) {
 		t.Errorf("diagnostics:\n got  %v\n want %v", got, want)
 	}
 
-	// Everything up to date: nothing changes.
-	output("> Task :compileKotlin UP-TO-DATE\n")
+	// A build that doesn't reach the Kotlin compile (it fails first)
+	// tells nothing: the diagnostics stay.
+	output("> Task :compileJava FAILED\n\n* What went wrong:\nboom\n\n* Try:\n")
 	c.notify("textDocument/didSave", map[string]any{"textDocument": map[string]any{"uri": uri}})
 	if d := c.nextDiagnosticsFor(uri); len(d.Diagnostics) != 3 {
-		t.Errorf("up to date: %d diagnostics, want 3 kept", len(d.Diagnostics))
+		t.Errorf("no compile: %d diagnostics, want 3 kept", len(d.Diagnostics))
 	}
-	// Fixed and saved: errors gone; the warning too (the file recompiled).
-	output("> Task :compileKotlin\nBUILD SUCCESSFUL\n")
+	// Fixed back to the last compiled content: Gradle says UP-TO-DATE and
+	// compiles nothing. The errors must still go (the reported bug).
+	output("> Task :compileKotlin UP-TO-DATE\nBUILD SUCCESSFUL\n")
 	c.notify("textDocument/didSave", map[string]any{"textDocument": map[string]any{"uri": uri}})
 	if d := c.nextDiagnosticsFor(uri); len(d.Diagnostics) != 0 {
-		t.Errorf("after fix: %+v", d.Diagnostics)
+		t.Errorf("after fix (up to date): %+v", d.Diagnostics)
 	}
 }
 
