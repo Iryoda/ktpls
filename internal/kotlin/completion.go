@@ -57,6 +57,8 @@ func Complete(f *ParsedFile, ix *Index, offset int) *protocol.CompletionList {
 		prefix:   prefix,
 		edit:     editRange,
 		seen:     map[string]bool{},
+
+		overloads: map[int]int{},
 	}
 	if recv := receiverBefore(f.Tree, src, start); recv != nil {
 		c.members(recv)
@@ -78,6 +80,8 @@ type completer struct {
 	edit   protocol.Range
 	items  []scored
 	seen   map[string]bool // dedup key: label + detail
+
+	overloads map[int]int // item index -> further overloads merged into it
 }
 
 type scored struct {
@@ -670,12 +674,29 @@ func (c *completer) add(item protocol.CompletionItem, tier, score int) {
 		return
 	}
 	c.seen[key] = true
+	// Overloads share one entry: the first signature, with a count.
+	if item.Kind == protocol.CompletionKindFunction || item.Kind == protocol.CompletionKindMethod {
+		for i := range c.items {
+			prev := &c.items[i].item
+			if prev.Label == item.Label && prev.Kind == item.Kind {
+				c.overloads[i]++
+				return
+			}
+		}
+	}
 	item.FilterText = item.Label
 	c.items = append(c.items, scored{item, tier, score, len(c.items)})
 }
 
 // list ranks the collected items: by tier, then match quality, then name.
 func (c *completer) list() *protocol.CompletionList {
+	for i, n := range c.overloads {
+		it := &c.items[i].item
+		if it.LabelDetails == nil {
+			it.LabelDetails = &protocol.CompletionItemLabelDetails{}
+		}
+		it.LabelDetails.Detail = fmt.Sprintf(" (+%d %s)", n, plural(n, "overload", "overloads"))
+	}
 	slices.SortStableFunc(c.items, func(a, b scored) int {
 		if a.tier != b.tier {
 			return cmp.Compare(a.tier, b.tier)

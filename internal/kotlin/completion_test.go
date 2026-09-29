@@ -409,3 +409,19 @@ func TestCompletionArgumentsAreFocused(t *testing.T) {
 		t.Errorf("order: %v", labels)
 	}
 }
+
+func TestCompletionMergesOverloads(t *testing.T) {
+	list, labels := complete(t, strings.Replace(filledSrc, "CALL", "gen|", 1)+"\nfun generateKey(x: Int) = \"\"\n")
+	n := 0
+	for _, l := range labels {
+		if l == "generateKey" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("generateKey listed %d times: %v", n, labels)
+	}
+	if it := item(list, "generateKey"); it.LabelDetails == nil || it.LabelDetails.Detail != " (+1 overload)" {
+		t.Errorf("label details: %+v", it.LabelDetails)
+	}
+}
