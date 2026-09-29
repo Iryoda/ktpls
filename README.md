@@ -6,11 +6,16 @@ with [tree-sitter](https://tree-sitter.github.io/) and resolves symbols
 across the `.kt`/`.kts` files of your workspace. There is no JVM and no
 Gradle import.
 
-See [PLAN.md](PLAN.md) for the roadmap. Status: **M1 (go to definition)**.
-Supported: document sync and **go to definition** (`gd`) across the
-workspace, covering locals, members (inherited, companion, extension),
-imports and aliases, named arguments, and `apply`/`run`/`with` receivers.
-Hover and completion are next.
+See [PLAN.md](PLAN.md) for the roadmap. Status: **M2 (hover)**.
+Supported:
+
+- **Go to definition** (`gd`) across the workspace, covering locals,
+  members (inherited, companion, extension), imports and aliases, named
+  arguments, and `apply`/`run`/`with` receivers.
+- **Hover** (`K`): the declaration's signature, where it's declared, and
+  its KDoc rendered as markdown.
+
+Completion is next.
 
 Resolution is syntax- and scope-based (there is no type checker), and
 limited to the workspace's own `.kt`/`.kts` files. It does not reach the

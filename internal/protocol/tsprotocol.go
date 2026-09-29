@@ -97,6 +97,7 @@ type ServerCapabilities struct {
 	PositionEncoding   PositionEncodingKind     `json:"positionEncoding,omitempty"`
 	TextDocumentSync   *TextDocumentSyncOptions `json:"textDocumentSync,omitempty"`
 	DefinitionProvider bool                     `json:"definitionProvider,omitempty"`
+	HoverProvider      bool                     `json:"hoverProvider,omitempty"`
 }
 
 type TextDocumentSyncKind int
@@ -150,6 +151,27 @@ type DidCloseTextDocumentParams struct {
 
 type DefinitionParams struct {
 	TextDocumentPositionParams
+}
+
+type HoverParams struct {
+	TextDocumentPositionParams
+}
+
+type MarkupKind string
+
+const (
+	PlainText MarkupKind = "plaintext"
+	Markdown  MarkupKind = "markdown"
+)
+
+type MarkupContent struct {
+	Kind  MarkupKind `json:"kind"`
+	Value string     `json:"value"`
+}
+
+type Hover struct {
+	Contents MarkupContent `json:"contents"`
+	Range    *Range        `json:"range,omitempty"`
 }
 
 // --- Window ---

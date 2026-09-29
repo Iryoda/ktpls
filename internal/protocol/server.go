@@ -19,6 +19,7 @@ type Server interface {
 	DidClose(context.Context, *DidCloseTextDocumentParams) error
 
 	Definition(context.Context, *DefinitionParams) ([]Location, error)
+	Hover(context.Context, *HoverParams) (*Hover, error)
 }
 
 // Dispatch decodes params for method and calls the matching Server method.
@@ -74,6 +75,13 @@ func Dispatch(ctx context.Context, s Server, method string, params json.RawMessa
 			return nil, true, err
 		}
 		res, err := s.Definition(ctx, &p)
+		return res, true, err
+	case "textDocument/hover":
+		var p HoverParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.Hover(ctx, &p)
 		return res, true, err
 	}
 	return nil, false, nil

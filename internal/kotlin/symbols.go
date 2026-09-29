@@ -31,6 +31,21 @@ var kindNames = map[Kind]string{
 
 func (k Kind) String() string { return kindNames[k] }
 
+// kindKeyword returns the Kotlin keyword that declares kind.
+func kindKeyword(k Kind) string {
+	switch k {
+	case KindInterface:
+		return "interface"
+	case KindObject:
+		return "object"
+	case KindFunction:
+		return "fun"
+	case KindProperty:
+		return "val"
+	}
+	return "class"
+}
+
 // IsType reports whether a symbol of kind k names a type.
 func (k Kind) IsType() bool {
 	switch k {
@@ -61,6 +76,11 @@ type Symbol struct {
 	// Params lists the parameters of a function or constructor, or the
 	// primary constructor parameters of a class.
 	Params []Param
+
+	// Signature is the declaration as Kotlin source without its body,
+	// e.g. "override fun area(): Double". Doc is its KDoc as markdown.
+	Signature string
+	Doc       string
 
 	Path           string
 	URI            protocol.DocumentURI
@@ -318,6 +338,9 @@ func (x *extractor) visitError(n *ts.Node, qual, container string) {
 				pending = x.add(n, kids[i+1], kind, f.qual, f.container)
 				pending.StartByte = c.StartByte()
 				pending.Range, _ = x.m.OffsetRange(int(c.StartByte()), int(n.EndByte()))
+				if doc := KDocBefore(x.src, c.StartByte()); doc != "" {
+					pending.Doc = RenderKDoc(doc)
+				}
 				pendingColumn = x.column(c)
 				i++
 				continue
@@ -451,6 +474,15 @@ func (x *extractor) addNamed(decl, nameNode *ts.Node, name string, kind Kind, qu
 	}
 	s.Range, _ = x.m.OffsetRange(int(decl.StartByte()), int(decl.EndByte()))
 	s.SelectionRange, _ = x.m.OffsetRange(int(nameNode.StartByte()), int(nameNode.EndByte()))
+	if decl.Kind() == "ERROR" || decl.Kind() == "infix_expression" {
+		// Recovered declarations: the node spans more than the header.
+		s.Signature = kindKeyword(kind) + " " + name
+	} else {
+		s.Signature = Signature(decl, x.src)
+	}
+	if doc := KDocBefore(x.src, decl.StartByte()); doc != "" {
+		s.Doc = RenderKDoc(doc)
+	}
 	x.sum.Symbols = append(x.sum.Symbols, s)
 	return s
 }

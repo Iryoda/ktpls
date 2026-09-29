@@ -15,7 +15,8 @@ Tree-sitter gives syntax only (no `go/types` equivalent for Kotlin exists in Go)
 
 - **M0 — done.** stdio JSON-RPC, lifecycle, document sync, workspace load; verified in Neovim 0.12.
 - **M1 — done.** `textDocument/definition`. On a 2,671-file production Kotlin service: workspace load 0.26–0.44 s, ~144 MB RSS; definition averages ~25 µs in-process, 0.06 ms round trip from Neovim. For names that exist in the workspace: 76% resolve to exactly one location (types 99%, named arguments 95%, member access 71%), 3.6% to more than 5.
-- Next: M1.5 (syntax diagnostics), then M2 (hover).
+- **M2 — done.** `textDocument/hover`: signature rebuilt from the syntax tree (annotations and bodies dropped, defaults elided to `= …`, long parameter lists wrapped), declaring container/package, KDoc rendered to markdown (`@param`/`@property`/`@return`/`@throws`/`@see` sections, `[links]` as code). Signatures and docs are precomputed at extraction, since disk files keep no tree. Same corpus: ~24 µs per hover, 0.07 ms round trip from Neovim; RSS ~115 MB.
+- Next: M3 (completion), then M1.5 (syntax diagnostics).
 
 ## Key design decisions
 

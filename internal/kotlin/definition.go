@@ -63,6 +63,9 @@ type target struct {
 	sym   *Symbol
 	local *local
 	param *protocol.Location
+	// For param targets: the parameter and the function declaring it.
+	paramInfo  Param
+	paramOwner *Symbol
 }
 
 func (t target) location(f *ParsedFile) protocol.Location {
@@ -740,7 +743,11 @@ func (r *resolver) resolveNamedArgument(arg *ts.Node, name string) []target {
 		for _, fn := range fns {
 			for _, p := range fn.Params {
 				if p.Name == name {
-					out = append(out, target{param: &protocol.Location{URI: fn.URI, Range: p.SelectionRange}})
+					out = append(out, target{
+						param:      &protocol.Location{URI: fn.URI, Range: p.SelectionRange},
+						paramInfo:  p,
+						paramOwner: fn,
+					})
 				}
 			}
 		}

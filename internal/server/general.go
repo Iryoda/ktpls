@@ -35,6 +35,7 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 				Save:      &protocol.SaveOptions{IncludeText: false},
 			},
 			DefinitionProvider: true,
+			HoverProvider:      true,
 		},
 		ServerInfo: &protocol.ServerInfo{Name: "kt-vibe-lsp", Version: Version},
 	}, nil
