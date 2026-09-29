@@ -23,6 +23,8 @@ type Server interface {
 	Implementation(context.Context, *ImplementationParams) ([]Location, error)
 	References(context.Context, *ReferenceParams) ([]Location, error)
 	CodeAction(context.Context, *CodeActionParams) ([]CodeAction, error)
+	PrepareRename(context.Context, *PrepareRenameParams) (*PrepareRenameResult, error)
+	Rename(context.Context, *RenameParams) (*WorkspaceEdit, error)
 	Hover(context.Context, *HoverParams) (*Hover, error)
 	Completion(context.Context, *CompletionParams) (*CompletionList, error)
 	DocumentSymbol(context.Context, *DocumentSymbolParams) ([]DocumentSymbol, error)
@@ -110,6 +112,20 @@ func Dispatch(ctx context.Context, s Server, method string, params json.RawMessa
 			return nil, true, err
 		}
 		res, err := s.CodeAction(ctx, &p)
+		return res, true, err
+	case "textDocument/prepareRename":
+		var p PrepareRenameParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.PrepareRename(ctx, &p)
+		return res, true, err
+	case "textDocument/rename":
+		var p RenameParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.Rename(ctx, &p)
 		return res, true, err
 	case "textDocument/hover":
 		var p HoverParams

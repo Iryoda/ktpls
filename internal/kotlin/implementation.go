@@ -19,9 +19,18 @@ func Implementation(f *ParsedFile, ix *Index, offset int) []protocol.Location {
 
 // implementations returns the implementations of the target declarations.
 func (r *resolver) implementations(targets []target) []protocol.Location {
+	var locs []protocol.Location
+	for _, s := range r.implementationSymbols(targets) {
+		locs = append(locs, s.Location())
+	}
+	return locs
+}
+
+// implementationSymbols returns the declarations implementing the targets.
+func (r *resolver) implementationSymbols(targets []target) []*Symbol {
 	ix := r.ix
 	var subs map[string][]*Symbol // built lazily: it scans the whole index
-	var locs []protocol.Location
+	var out []*Symbol
 	seen := map[*Symbol]bool{}
 	for _, t := range targets {
 		s := t.sym
@@ -36,7 +45,7 @@ func (r *resolver) implementations(targets []target) []protocol.Location {
 			for _, sub := range subtypesOf(s.FQName, subs) {
 				if !seen[sub] {
 					seen[sub] = true
-					locs = append(locs, sub.Location())
+					out = append(out, sub)
 				}
 			}
 		case s.Container != "":
@@ -44,13 +53,13 @@ func (r *resolver) implementations(targets []target) []protocol.Location {
 				for _, m := range ix.Members(sub.FQName) {
 					if m.Name == s.Name && m.Kind == s.Kind && !seen[m] {
 						seen[m] = true
-						locs = append(locs, m.Location())
+						out = append(out, m)
 					}
 				}
 			}
 		}
 	}
-	return locs
+	return out
 }
 
 // subtypeMap maps each workspace type's FQName to the types declaring it

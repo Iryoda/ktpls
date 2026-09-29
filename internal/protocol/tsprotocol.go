@@ -100,11 +100,12 @@ type ServerCapabilities struct {
 	HoverProvider      bool                     `json:"hoverProvider,omitempty"`
 	CompletionProvider *CompletionOptions       `json:"completionProvider,omitempty"`
 
-	ImplementationProvider  bool `json:"implementationProvider,omitempty"`
-	ReferencesProvider      bool `json:"referencesProvider,omitempty"`
-	CodeActionProvider      bool `json:"codeActionProvider,omitempty"`
-	DocumentSymbolProvider  bool `json:"documentSymbolProvider,omitempty"`
-	WorkspaceSymbolProvider bool `json:"workspaceSymbolProvider,omitempty"`
+	ImplementationProvider  bool           `json:"implementationProvider,omitempty"`
+	ReferencesProvider      bool           `json:"referencesProvider,omitempty"`
+	CodeActionProvider      bool           `json:"codeActionProvider,omitempty"`
+	RenameProvider          *RenameOptions `json:"renameProvider,omitempty"`
+	DocumentSymbolProvider  bool           `json:"documentSymbolProvider,omitempty"`
+	WorkspaceSymbolProvider bool           `json:"workspaceSymbolProvider,omitempty"`
 }
 
 type TextDocumentSyncKind int
@@ -196,6 +197,24 @@ type WorkspaceEdit struct {
 
 // Code action kinds.
 const RefactorRewrite = "refactor.rewrite"
+
+type RenameOptions struct {
+	PrepareProvider bool `json:"prepareProvider"`
+}
+
+type PrepareRenameParams struct {
+	TextDocumentPositionParams
+}
+
+type PrepareRenameResult struct {
+	Range       Range  `json:"range"`
+	Placeholder string `json:"placeholder"`
+}
+
+type RenameParams struct {
+	TextDocumentPositionParams
+	NewName string `json:"newName"`
+}
 
 type HoverParams struct {
 	TextDocumentPositionParams

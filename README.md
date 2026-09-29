@@ -23,6 +23,12 @@ Supported:
   declaration or any use), the types implementing it; from a method, its
   overrides.
 - **Find references** (`gr`), including uses through import aliases.
+- **Rename** across the workspace. Renaming a method renames the whole
+  override family (the interface declaration, every override, all uses);
+  uses through an import alias keep the alias; named arguments follow a
+  renamed parameter.
+- **Code action**: add parameter names to a call's arguments
+  (`f(a, b)` → `f(x = a, y = b)`).
 - **Document outline** and **workspace symbol search**.
 - **Syntax errors** as warnings while you edit. Only errors introduced
   since the file was opened are reported, so parser gaps on valid code

@@ -34,10 +34,6 @@ func References(f *ParsedFile, ix *Index, offset int, includeDecl bool, files Fi
 	if len(targets) == 0 {
 		return nil
 	}
-	want := map[protocol.Location]bool{}
-	for _, t := range targets {
-		want[t.location(f)] = true
-	}
 	// The names a use may have: the identifier, the declaration's own
 	// name, and any import alias of it (`import a.format as fmt`).
 	names := map[string]bool{trimDollar(text(id, f.Content)): true}
@@ -46,15 +42,34 @@ func References(f *ParsedFile, ix *Index, offset int, includeDecl bool, files Fi
 			continue
 		}
 		names[t.sym.Name] = true
-		for sum := range ix.Files() {
-			for _, imp := range sum.Imports {
-				if imp.Alias != "" && imp.Path == t.sym.FQName {
-					names[imp.Alias] = true
-				}
+		for alias := range r.importAliases(t.sym) {
+			names[alias] = true
+		}
+	}
+	return r.findUses(targets, names, includeDecl, files)
+}
+
+// importAliases returns the aliases under which s is imported anywhere.
+func (r *resolver) importAliases(s *Symbol) map[string]bool {
+	aliases := map[string]bool{}
+	for sum := range r.ix.Files() {
+		for _, imp := range sum.Imports {
+			if imp.Alias != "" && imp.Path == s.FQName {
+				aliases[imp.Alias] = true
 			}
 		}
 	}
+	return aliases
+}
 
+// findUses returns the locations of identifiers spelled as one of names
+// that resolve to one of the targets (compared by declaration location),
+// sorted by file and position.
+func (r *resolver) findUses(targets []target, names map[string]bool, includeDecl bool, files FileSource) []protocol.Location {
+	want := map[protocol.Location]bool{}
+	for _, t := range targets {
+		want[t.location(r.f)] = true
+	}
 	var (
 		mu   sync.Mutex
 		locs []protocol.Location
@@ -62,7 +77,7 @@ func References(f *ParsedFile, ix *Index, offset int, includeDecl bool, files Fi
 	)
 	for name := range names {
 		files(name, func(pf *ParsedFile) {
-			pr := &resolver{f: pf, ix: ix, src: pf.Content}
+			pr := &resolver{f: pf, ix: r.ix, src: pf.Content}
 			var found []protocol.Location
 			walkIdentifiers(pf.Tree.RootNode(), func(n *ts.Node) {
 				if trimDollar(text(n, pf.Content)) != name {
