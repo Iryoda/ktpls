@@ -12,8 +12,20 @@ import (
 // is broken one parameter per line.
 const maxSignatureLine = 90
 
-// maxInitializer bounds the initializer shown in a property signature.
+// maxInitializer bounds the initializers and default values shown in
+// signatures; longer or multi-line ones are elided.
 const maxInitializer = 40
+
+// shortValue returns the text of a default value or initializer if it is
+// a single line of at most maxInitializer bytes, else "..." (ASCII, not
+// the one-cell "…", which monospace fonts render cramped).
+func shortValue(n *ts.Node, src []byte) string {
+	t := text(n, src)
+	if strings.Contains(t, "\n") || len(t) > maxInitializer {
+		return "..."
+	}
+	return textutil.CollapseSpace(t)
+}
 
 // headerStop lists the nodes where a declaration's header ends: bodies
 // and accessors are not part of a signature.
@@ -125,15 +137,14 @@ func (w *sigWriter) header(n *ts.Node, top bool) bool {
 		case c.Kind() == "=" && top:
 			return false // property initializer / expression body
 		case c.Kind() == "=" && (n.Kind() == "function_value_parameters" || n.Kind() == "class_parameter" || n.Kind() == "parameter"):
-			// A default value: `= ...`, skipping the expression. (ASCII, not the
-			// one-cell "…", which monospace fonts render cramped.)
+			// A default value: shown as written if short, else `= ...`.
 			w.token(c)
 			j := i + 1
 			for j < len(kids) && !kids[j].IsNamed() {
 				j++
 			}
 			if j < len(kids) {
-				w.emit("...", kids[j].StartByte(), kids[j].EndByte())
+				w.emit(shortValue(kids[j], w.src), kids[j].StartByte(), kids[j].EndByte())
 				i = j
 			}
 			continue

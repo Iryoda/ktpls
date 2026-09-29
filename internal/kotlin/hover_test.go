@@ -63,7 +63,7 @@ func TestHover(t *testing.T) {
 		{
 			name:   "function with KDoc tags",
 			needle: "greet(name = ",
-			want: "```kotlin\nsuspend fun greet(name: String, times: Int = ...): String\n```\n\n*package `acme.greet`*\n\n---\n\n" +
+			want: "```kotlin\nsuspend fun greet(name: String, times: Int = 1): String\n```\n\n*package `acme.greet`*\n\n---\n\n" +
 				"Greets `name` politely.\n\nUses a [Formatter](https://example.com/fmt) when set.\n\n" +
 				"**Parameters**\n- `name` — who to greet\n- `times` — how many times; defaults to once\n\n" +
 				"**Returns**\n- the greeting\n\n" +
@@ -83,7 +83,7 @@ func TestHover(t *testing.T) {
 		{
 			name:   "generic data class",
 			needle: "Box<String>",
-			want: "```kotlin\ndata class Box<T : Any>(val item: T, private val tag: String = ...) : Comparable<Box<T>>\n```\n\n" +
+			want: "```kotlin\ndata class Box<T : Any>(\n    val item: T,\n    private val tag: String = \"none\",\n) : Comparable<Box<T>>\n```\n\n" +
 				"*package `acme.greet`*\n\n---\n\nHolds an `item`.",
 		},
 		{
@@ -104,7 +104,7 @@ func TestHover(t *testing.T) {
 		{
 			name:   "long parameter list wraps",
 			needle: "configure(\"h\")",
-			want: "```kotlin\nfun configure(\n    host: String,\n    port: Int = ...,\n    secure: Boolean = ...,\n    retries: Int = ...,\n    timeoutMillis: Long = ...,\n)\n```\n\n" +
+			want: "```kotlin\nfun configure(\n    host: String,\n    port: Int = 8080,\n    secure: Boolean = false,\n    retries: Int = 3,\n    timeoutMillis: Long = 1000,\n)\n```\n\n" +
 				"*package `acme.greet`*",
 		},
 		{
@@ -169,5 +169,32 @@ func TestRenderKDocCodeFence(t *testing.T) {
 	want := "Example:\n```\n@Foo val x = [a]\n```"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestSignatureDefaultValues(t *testing.T) {
+	f, _ := parseOne(t, "/w/F.kt", `package p
+
+data class File(
+    val id: String? = null,
+    val url: String,
+    val isPublic: Boolean = true,
+    val created: LocalDateTime = LocalDateTime.now(),
+    val tags: List<String> = listOf("a very long default value", "that goes on"),
+    val handler: () -> Unit = {
+        println("multi-line")
+    },
+)
+`)
+	want := "data class File(\n" +
+		"    val id: String? = null,\n" +
+		"    val url: String,\n" +
+		"    val isPublic: Boolean = true,\n" +
+		"    val created: LocalDateTime = LocalDateTime.now(),\n" +
+		"    val tags: List<String> = ...,\n" +
+		"    val handler: () -> Unit = ...,\n" +
+		")"
+	if got := f.Summary.Symbols[0].Signature; got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
