@@ -63,7 +63,7 @@ func TestHover(t *testing.T) {
 		{
 			name:   "function with KDoc tags",
 			needle: "greet(name = ",
-			want: "```kotlin\nsuspend fun greet(name: String, times: Int = …): String\n```\n\n*package `acme.greet`*\n\n---\n\n" +
+			want: "```kotlin\nsuspend fun greet(name: String, times: Int = ...): String\n```\n\n*package `acme.greet`*\n\n---\n\n" +
 				"Greets `name` politely.\n\nUses a [Formatter](https://example.com/fmt) when set.\n\n" +
 				"**Parameters**\n- `name` — who to greet\n- `times` — how many times; defaults to once\n\n" +
 				"**Returns**\n- the greeting\n\n" +
@@ -83,7 +83,7 @@ func TestHover(t *testing.T) {
 		{
 			name:   "generic data class",
 			needle: "Box<String>",
-			want: "```kotlin\ndata class Box<T : Any>(val item: T, private val tag: String = …) : Comparable<Box<T>>\n```\n\n" +
+			want: "```kotlin\ndata class Box<T : Any>(val item: T, private val tag: String = ...) : Comparable<Box<T>>\n```\n\n" +
 				"*package `acme.greet`*\n\n---\n\nHolds an `item`.",
 		},
 		{
@@ -104,7 +104,7 @@ func TestHover(t *testing.T) {
 		{
 			name:   "long parameter list wraps",
 			needle: "configure(\"h\")",
-			want: "```kotlin\nfun configure(\n    host: String,\n    port: Int = …,\n    secure: Boolean = …,\n    retries: Int = …,\n    timeoutMillis: Long = …,\n)\n```\n\n" +
+			want: "```kotlin\nfun configure(\n    host: String,\n    port: Int = ...,\n    secure: Boolean = ...,\n    retries: Int = ...,\n    timeoutMillis: Long = ...,\n)\n```\n\n" +
 				"*package `acme.greet`*",
 		},
 		{

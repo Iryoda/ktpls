@@ -99,6 +99,11 @@ type ServerCapabilities struct {
 	DefinitionProvider bool                     `json:"definitionProvider,omitempty"`
 	HoverProvider      bool                     `json:"hoverProvider,omitempty"`
 	CompletionProvider *CompletionOptions       `json:"completionProvider,omitempty"`
+
+	ImplementationProvider  bool `json:"implementationProvider,omitempty"`
+	ReferencesProvider      bool `json:"referencesProvider,omitempty"`
+	DocumentSymbolProvider  bool `json:"documentSymbolProvider,omitempty"`
+	WorkspaceSymbolProvider bool `json:"workspaceSymbolProvider,omitempty"`
 }
 
 type TextDocumentSyncKind int
@@ -152,6 +157,19 @@ type DidCloseTextDocumentParams struct {
 
 type DefinitionParams struct {
 	TextDocumentPositionParams
+}
+
+type ImplementationParams struct {
+	TextDocumentPositionParams
+}
+
+type ReferenceParams struct {
+	TextDocumentPositionParams
+	Context ReferenceContext `json:"context"`
+}
+
+type ReferenceContext struct {
+	IncludeDeclaration bool `json:"includeDeclaration"`
 }
 
 type HoverParams struct {
@@ -241,9 +259,66 @@ type CompletionItem struct {
 	AdditionalTextEdits []TextEdit                  `json:"additionalTextEdits,omitempty"`
 }
 
+type SymbolKind int
+
+const (
+	SymbolKindFile          SymbolKind = 1
+	SymbolKindModule        SymbolKind = 2
+	SymbolKindNamespace     SymbolKind = 3
+	SymbolKindPackage       SymbolKind = 4
+	SymbolKindClass         SymbolKind = 5
+	SymbolKindMethod        SymbolKind = 6
+	SymbolKindProperty      SymbolKind = 7
+	SymbolKindField         SymbolKind = 8
+	SymbolKindConstructor   SymbolKind = 9
+	SymbolKindEnum          SymbolKind = 10
+	SymbolKindInterface     SymbolKind = 11
+	SymbolKindFunction      SymbolKind = 12
+	SymbolKindVariable      SymbolKind = 13
+	SymbolKindConstant      SymbolKind = 14
+	SymbolKindObject        SymbolKind = 19
+	SymbolKindEnumMember    SymbolKind = 22
+	SymbolKindTypeParameter SymbolKind = 26
+)
+
+type DocumentSymbolParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+type DocumentSymbol struct {
+	Name           string           `json:"name"`
+	Detail         string           `json:"detail,omitempty"`
+	Kind           SymbolKind       `json:"kind"`
+	Range          Range            `json:"range"`
+	SelectionRange Range            `json:"selectionRange"`
+	Children       []DocumentSymbol `json:"children,omitempty"`
+}
+
+type WorkspaceSymbolParams struct {
+	Query string `json:"query"`
+}
+
+type SymbolInformation struct {
+	Name          string     `json:"name"`
+	Kind          SymbolKind `json:"kind"`
+	Location      Location   `json:"location"`
+	ContainerName string     `json:"containerName,omitempty"`
+}
+
 type Hover struct {
 	Contents MarkupContent `json:"contents"`
 	Range    *Range        `json:"range,omitempty"`
+}
+
+// --- Workspace ---
+
+type DidChangeWatchedFilesParams struct {
+	Changes []FileEvent `json:"changes"`
+}
+
+type FileEvent struct {
+	URI  DocumentURI `json:"uri"`
+	Type int         `json:"type"` // 1 created, 2 changed, 3 deleted
 }
 
 // --- Window ---

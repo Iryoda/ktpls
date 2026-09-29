@@ -37,6 +37,11 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 			DefinitionProvider: true,
 			HoverProvider:      true,
 			CompletionProvider: &protocol.CompletionOptions{TriggerCharacters: []string{"."}},
+
+			ImplementationProvider:  true,
+			ReferencesProvider:      true,
+			DocumentSymbolProvider:  true,
+			WorkspaceSymbolProvider: true,
 		},
 		ServerInfo: &protocol.ServerInfo{Name: "ktpls", Version: Version},
 	}, nil
@@ -72,7 +77,12 @@ func (s *Server) Initialized(ctx context.Context, params *protocol.InitializedPa
 // loadWorkspace parses every Kotlin file in the workspace in the
 // background, so that cross-file features work before files are opened.
 func (s *Server) loadWorkspace() {
-	defer close(s.loaded)
+	defer func() {
+		s.mu.Lock()
+		s.lastScan = time.Now()
+		s.mu.Unlock()
+		close(s.loaded)
+	}()
 	start := time.Now()
 	n, err := s.session.LoadWorkspace(s.ctx)
 	if err != nil {

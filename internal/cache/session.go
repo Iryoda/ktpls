@@ -8,7 +8,6 @@ import (
 	"iter"
 	"log/slog"
 	"maps"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -29,6 +28,8 @@ type Session struct {
 	mu    sync.RWMutex
 	files map[string]*File
 	index *kotlin.Index
+
+	scanMu sync.Mutex // serializes workspace scans
 }
 
 // NewSession returns a session for the workspace rooted at root.
@@ -55,9 +56,9 @@ func (s *Session) Change(path string, version int32, content []byte) {
 // Close records that an editor buffer was closed: the file reverts to its
 // on-disk contents, or is forgotten if it isn't a workspace file on disk.
 func (s *Session) Close(path string) {
-	if s.inWorkspace(path) {
-		if content, err := os.ReadFile(path); err == nil {
-			s.put(newFile(path, 0, false, content, s.enc))
+	if s.inWorkspace(path) && IsKotlinFile(path) {
+		if f := s.readFile(path); f != nil {
+			s.put(f)
 			return
 		}
 	}

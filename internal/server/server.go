@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Iryoda/ktpls/internal/cache"
@@ -41,7 +42,14 @@ type Server struct {
 
 	exited chan struct{} // closed on exit
 	loaded chan struct{} // closed when the initial workspace load finishes
+
+	lastScan time.Time   // guarded by mu
+	scanning atomic.Bool // a background rescan is running
 }
+
+// rescanInterval is the minimum time between background rescans of the
+// workspace for files changed on disk (git checkout, external edits).
+const rescanInterval = 3 * time.Second
 
 var _ protocol.Server = (*Server)(nil)
 
@@ -99,6 +107,7 @@ func (s *Server) Handle(ctx context.Context, msg *protocol.Message) (any, error)
 	}
 
 	result, handled, err := protocol.Dispatch(ctx, s, msg.Method, msg.Params)
+	s.maybeRescan(false)
 	if !handled {
 		if msg.IsCall() {
 			return nil, protocol.Errorf(protocol.CodeMethodNotFound, "method not supported: %s", msg.Method)
@@ -106,6 +115,37 @@ func (s *Server) Handle(ctx context.Context, msg *protocol.Message) (any, error)
 		return nil, nil // unknown notifications (e.g. $/cancelRequest) are ignored
 	}
 	return result, err
+}
+
+// maybeRescan starts a background rescan of the workspace if the initial
+// load is done and none ran recently (or force is set). Activity drives
+// it: an idle editor causes no disk traffic.
+func (s *Server) maybeRescan(force bool) {
+	select {
+	case <-s.loaded:
+	default:
+		return
+	}
+	s.mu.Lock()
+	due := force || time.Since(s.lastScan) >= rescanInterval
+	if due {
+		s.lastScan = time.Now()
+	}
+	s.mu.Unlock()
+	if !due || !s.scanning.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer s.scanning.Store(false)
+		start := time.Now()
+		n, err := s.session.Rescan(s.ctx)
+		if err != nil {
+			s.log.Debug("rescan", "err", err)
+		}
+		if n > 0 {
+			s.log.Info("rescan", "changed", n, "elapsed", time.Since(start).Round(time.Millisecond))
+		}
+	}()
 }
 
 // logMessage shows a message in the client's log (:LspLog in Neovim).

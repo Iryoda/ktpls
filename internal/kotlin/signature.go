@@ -59,7 +59,7 @@ func Signature(decl *ts.Node, src []byte) string {
 			}
 		}
 		if d := child(decl, "property_delegate"); d != nil {
-			sig += " by …"
+			sig += " by ..."
 		}
 	}
 	return wrapParams(sig)
@@ -123,14 +123,15 @@ func (w *sigWriter) header(n *ts.Node, top bool) bool {
 		case c.Kind() == "=" && top:
 			return false // property initializer / expression body
 		case c.Kind() == "=" && (n.Kind() == "function_value_parameters" || n.Kind() == "class_parameter" || n.Kind() == "parameter"):
-			// A default value: `= …`, skipping the expression.
+			// A default value: `= ...`, skipping the expression. (ASCII, not the
+			// one-cell "…", which monospace fonts render cramped.)
 			w.token(c)
 			j := i + 1
 			for j < len(kids) && !kids[j].IsNamed() {
 				j++
 			}
 			if j < len(kids) {
-				w.emit("…", kids[j].StartByte(), kids[j].EndByte())
+				w.emit("...", kids[j].StartByte(), kids[j].EndByte())
 				i = j
 			}
 			continue

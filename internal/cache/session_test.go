@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/Iryoda/ktpls/internal/protocol"
 )
@@ -89,6 +91,100 @@ func TestInWorkspace(t *testing.T) {
 	} {
 		if got := s.inWorkspace(path); got != want {
 			t.Errorf("inWorkspace(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
+func TestRescan(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// Make each write visibly newer, whatever the filesystem's
+		// timestamp granularity.
+		later := time.Now().Add(time.Duration(len(content)) * time.Second)
+		os.Chtimes(p, later, later)
+	}
+	names := func(s *Session) []string {
+		var out []string
+		s.Read(func(sn *Snapshot) {
+			for f := range sn.Files() {
+				for _, sym := range f.Summary.Symbols {
+					out = append(out, sym.Name)
+				}
+			}
+		})
+		slices.Sort(out)
+		return out
+	}
+	write("a/A.kt", "class Alpha\n")
+	write("a/B.kt", "class Beta\n")
+	write("gen/G.kt", "class Generated\n")
+	write("x.gen.kt", "class GenFile\n")
+	write(".gitignore", "# generated code\n/gen/\n*.gen.kt\n")
+
+	s := newTestSession(t, root)
+	if _, err := s.LoadWorkspace(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(s); !slices.Equal(got, []string{"Alpha", "Beta"}) {
+		t.Fatalf("initial load: %v", got)
+	}
+
+	// Nothing changed: nothing to do.
+	if n, _ := s.Rescan(context.Background()); n != 0 {
+		t.Errorf("idle rescan changed %d files", n)
+	}
+
+	// Edit, add and delete files on disk (e.g. git checkout).
+	write("a/A.kt", "class AlphaRenamed\n")
+	write("a/C.kt", "class Gamma\n")
+	os.Remove(filepath.Join(root, "a/B.kt"))
+	// An open buffer is the source of truth, even if its file changes.
+	s.Open(filepath.Join(root, "a/C.kt"), 1, []byte("class GammaEdited\n"))
+	write("a/C.kt", "class GammaOnDisk\n")
+
+	if n, _ := s.Rescan(context.Background()); n != 2 {
+		t.Errorf("rescan changed %d files, want 2 (A edited, B deleted)", n)
+	}
+	if got := names(s); !slices.Equal(got, []string{"AlphaRenamed", "GammaEdited"}) {
+		t.Errorf("after rescan: %v", got)
+	}
+	// Closing the buffer picks up the disk version.
+	s.Close(filepath.Join(root, "a/C.kt"))
+	if got := names(s); !slices.Equal(got, []string{"AlphaRenamed", "GammaOnDisk"}) {
+		t.Errorf("after close: %v", got)
+	}
+}
+
+func TestGitignore(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, ".gitignore"), []byte("tmp/\n/generated\n*.bak.kt\n**/cache\n!keep.kt\ndocs/api/*.kt\n"), 0o644)
+	g := loadGitignore(root)
+	for _, tt := range []struct {
+		rel   string
+		isDir bool
+		want  bool
+	}{
+		{"tmp", true, true},
+		{"src/tmp", true, true},
+		{"tmp", false, false}, // dir-only pattern
+		{"generated", true, true},
+		{"src/generated", true, false}, // rooted
+		{"src/x.bak.kt", false, true},
+		{"a/b/cache", true, true},
+		{"docs/api/A.kt", false, true},
+		{"docs/A.kt", false, false},
+		{"src/Main.kt", false, false},
+	} {
+		if got := g.match(filepath.FromSlash(tt.rel), tt.isDir); got != tt.want {
+			t.Errorf("match(%q, dir=%v) = %v, want %v", tt.rel, tt.isDir, got, tt.want)
 		}
 	}
 }

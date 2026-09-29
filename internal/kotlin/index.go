@@ -97,5 +97,8 @@ func (ix *Index) Extensions() iter.Seq[*Symbol] { return maps.Keys(ix.exts) }
 // Names returns all simple names in the index.
 func (ix *Index) Names() iter.Seq[string] { return maps.Keys(ix.byName) }
 
+// Files returns the summaries of all indexed files.
+func (ix *Index) Files() iter.Seq[*FileSummary] { return maps.Values(ix.files) }
+
 // NumFiles returns the number of indexed files.
 func (ix *Index) NumFiles() int { return len(ix.files) }

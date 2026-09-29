@@ -19,6 +19,13 @@ Supported:
   locals, enclosing-class members, named arguments (`name =`), keywords,
   and workspace declarations that aren't imported yet (accepting one adds
   the `import`).
+- **Go to implementation** (`gi`): subtypes of a class or interface, and
+  the overrides of a member.
+- **Find references** (`gr`), including uses through import aliases.
+- **Document outline** and **workspace symbol search**.
+- Files changed on disk (git checkout, edits made outside the editor) are
+  picked up automatically. The workspace walk skips build outputs and
+  honors the root `.gitignore`.
 
 Resolution is syntax- and scope-based (there is no type checker), and
 limited to the workspace's own `.kt`/`.kts` files. It does not reach the

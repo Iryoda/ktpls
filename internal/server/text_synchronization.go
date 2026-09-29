@@ -64,6 +64,11 @@ func (s *Server) DidSave(ctx context.Context, params *protocol.DidSaveTextDocume
 	return nil
 }
 
+func (s *Server) DidChangeWatchedFiles(ctx context.Context, params *protocol.DidChangeWatchedFilesParams) error {
+	s.maybeRescan(true)
+	return nil
+}
+
 func (s *Server) DidClose(ctx context.Context, params *protocol.DidCloseTextDocumentParams) error {
 	path, err := params.TextDocument.URI.Path()
 	if err != nil {

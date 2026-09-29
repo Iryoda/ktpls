@@ -17,10 +17,15 @@ type Server interface {
 	DidChange(context.Context, *DidChangeTextDocumentParams) error
 	DidSave(context.Context, *DidSaveTextDocumentParams) error
 	DidClose(context.Context, *DidCloseTextDocumentParams) error
+	DidChangeWatchedFiles(context.Context, *DidChangeWatchedFilesParams) error
 
 	Definition(context.Context, *DefinitionParams) ([]Location, error)
+	Implementation(context.Context, *ImplementationParams) ([]Location, error)
+	References(context.Context, *ReferenceParams) ([]Location, error)
 	Hover(context.Context, *HoverParams) (*Hover, error)
 	Completion(context.Context, *CompletionParams) (*CompletionList, error)
+	DocumentSymbol(context.Context, *DocumentSymbolParams) ([]DocumentSymbol, error)
+	WorkspaceSymbol(context.Context, *WorkspaceSymbolParams) ([]SymbolInformation, error)
 }
 
 // Dispatch decodes params for method and calls the matching Server method.
@@ -70,12 +75,33 @@ func Dispatch(ctx context.Context, s Server, method string, params json.RawMessa
 		}
 		return nil, true, s.DidClose(ctx, &p)
 
+	case "workspace/didChangeWatchedFiles":
+		var p DidChangeWatchedFilesParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		return nil, true, s.DidChangeWatchedFiles(ctx, &p)
+
 	case "textDocument/definition":
 		var p DefinitionParams
 		if err := unmarshalParams(params, &p); err != nil {
 			return nil, true, err
 		}
 		res, err := s.Definition(ctx, &p)
+		return res, true, err
+	case "textDocument/implementation":
+		var p ImplementationParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.Implementation(ctx, &p)
+		return res, true, err
+	case "textDocument/references":
+		var p ReferenceParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.References(ctx, &p)
 		return res, true, err
 	case "textDocument/hover":
 		var p HoverParams
@@ -90,6 +116,20 @@ func Dispatch(ctx context.Context, s Server, method string, params json.RawMessa
 			return nil, true, err
 		}
 		res, err := s.Completion(ctx, &p)
+		return res, true, err
+	case "textDocument/documentSymbol":
+		var p DocumentSymbolParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.DocumentSymbol(ctx, &p)
+		return res, true, err
+	case "workspace/symbol":
+		var p WorkspaceSymbolParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.WorkspaceSymbol(ctx, &p)
 		return res, true, err
 	}
 	return nil, false, nil

@@ -17,9 +17,10 @@ Tree-sitter gives syntax only (no `go/types` equivalent for Kotlin exists in Go)
 
 - **M0 — done.** stdio JSON-RPC, lifecycle, document sync, workspace load; verified in Neovim 0.12.
 - **M1 — done.** `textDocument/definition`. On a 2,671-file production Kotlin service: workspace load 0.26–0.44 s, ~144 MB RSS; definition averages ~25 µs in-process, 0.06 ms round trip from Neovim. For names that exist in the workspace: 76% resolve to exactly one location (types 99%, named arguments 95%, member access 71%), 3.6% to more than 5.
-- **M2 — done.** `textDocument/hover`: signature rebuilt from the syntax tree (annotations and bodies dropped, defaults elided to `= …`, long parameter lists wrapped), declaring container/package, KDoc rendered to markdown (`@param`/`@property`/`@return`/`@throws`/`@see` sections, `[links]` as code). Signatures and docs are precomputed at extraction, since disk files keep no tree. Same corpus: ~24 µs per hover, 0.07 ms round trip from Neovim; RSS ~115 MB.
+- **M2 — done.** `textDocument/hover`: signature rebuilt from the syntax tree (annotations and bodies dropped, defaults elided to `= ...`, long parameter lists wrapped), declaring container/package, KDoc rendered to markdown (`@param`/`@property`/`@return`/`@throws`/`@see` sections, `[links]` as code). Signatures and docs are precomputed at extraction, since disk files keep no tree. Same corpus: ~24 µs per hover, 0.07 ms round trip from Neovim; RSS ~115 MB.
 - **M3 — done.** `textDocument/completion`: dot-member completion (typed receivers, inherited members, extensions, companion/enum entries via a type name, `also`/`apply` returning the receiver; nothing for unknown receivers), locals nearest-first, enclosing-class members, same-package and imported symbols, named arguments `name =`, keywords, and unimported workspace symbols with an auto-import edit. Ranked by tier then fuzzy score. Pulled dot-completion forward from M4 since M1's receiver typing made it cheap. Measured by simulated typing (identifier truncated to its first characters, rest of line removed) on the same corpus: the intended name is offered 96% of the time after 2 characters (83% in the top 5), 93% right after a dot; ~0.9 ms per request in-process, 0.15 ms round trip from Neovim.
-- Next: M1.5 (syntax diagnostics), then M4.
+- **M4 (part 1) — done.** `textDocument/implementation` (transitive subtypes; same-name members for overrides), `textDocument/references` (same resolver as definition, compared by declaration location; searches import aliases; candidate files prefiltered by whole-word match and processed in parallel: ~10 ms avg, 142 ms worst on the corpus), `textDocument/documentSymbol`, `workspace/symbol`, background rescan of files changed on disk (stat-based, ~23 ms idle, at most every 3 s while active; also on `workspace/didChangeWatchedFiles`), root `.gitignore` subset.
+- Next: types of `it` / lambda parameters, then M1.5 (syntax diagnostics).
 
 ## Key design decisions
 
@@ -84,7 +85,7 @@ Makefile                         # build/test/install with CGO_ENABLED=1
 
 ### M2 — Hover (`textDocument/hover`)
 - Reuse M1 resolver; if ambiguous show first + "_+N other candidates_".
-- **Signature reconstruction** from syntax nodes (not raw text): re-serialize declaration header stopping before body; default values elided to `= …`; properties never type-inferred.
+- **Signature reconstruction** from syntax nodes (not raw text): re-serialize declaration header stopping before body; default values elided to `= ...`; properties never type-inferred.
 - **KDoc:** nearest preceding `multiline_comment` starting `/**`, adjacent (≤1 blank line; check before `modifiers`/annotations too); strip gutters; `@param`/`@return` read fine as markdown.
 - Response: `MarkupContent` markdown — fenced ```kotlin signature, `---`, doc body; `range` = identifier.
 - **Tests:** `/*@hover(x)*/` markers + expected-markdown table. Cases: fn with KDoc, undocumented property, generic class, KDoc separated by >1 blank line (must NOT attach), annotated declaration. Manual: `K`.

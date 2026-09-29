@@ -3,6 +3,8 @@ package cache
 import (
 	"fmt"
 	"os"
+	"runtime"
+	"sync"
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
@@ -30,6 +32,8 @@ type File struct {
 
 	Summary      *kotlin.FileSummary
 	SyntaxErrors bool
+
+	stamp stamp // disk files: the version read
 }
 
 func newFile(path string, version int32, overlay bool, content []byte, enc protocol.PositionEncodingKind) *File {
@@ -79,4 +83,40 @@ func (sn *Snapshot) Parse(path string) (pf *kotlin.ParsedFile, release func(), e
 		Summary: kotlin.Extract(path, content, tree, m),
 	}
 	return pf, tree.Close, nil
+}
+
+// FilesContaining calls fn, concurrently, with every known file whose
+// content contains name as a whole word, parsed. Open buffers are used as
+// they are; disk files are read and parsed for the duration of the call.
+func (sn *Snapshot) FilesContaining(name string, fn func(*kotlin.ParsedFile)) {
+	work := make(chan *File)
+	var wg sync.WaitGroup
+	for range runtime.GOMAXPROCS(0) {
+		wg.Go(func() {
+			for f := range work {
+				if f.Tree != nil {
+					if kotlin.ContainsWord(f.Content, name) {
+						fn(&kotlin.ParsedFile{Path: f.Path, URI: f.URI, Content: f.Content, Tree: f.Tree, Mapper: f.Mapper, Summary: f.Summary})
+					}
+					continue
+				}
+				content, err := os.ReadFile(f.Path)
+				if err != nil || !kotlin.ContainsWord(content, name) {
+					continue
+				}
+				tree := kotlin.Parse(content)
+				m := protocol.NewMapper(content, sn.enc)
+				fn(&kotlin.ParsedFile{
+					Path: f.Path, URI: f.URI, Content: content, Tree: tree, Mapper: m,
+					Summary: kotlin.Extract(f.Path, content, tree, m),
+				})
+				tree.Close()
+			}
+		})
+	}
+	for _, f := range sn.files {
+		work <- f
+	}
+	close(work)
+	wg.Wait()
 }
