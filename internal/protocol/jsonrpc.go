@@ -1,5 +1,5 @@
 // Package protocol implements the subset of the Language Server Protocol
-// used by kt-vibe-lsp: JSON-RPC 2.0 framing over a byte stream, the LSP
+// used by ktpls: JSON-RPC 2.0 framing over a byte stream, the LSP
 // message types, request dispatch, and position mapping.
 package protocol
 

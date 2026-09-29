@@ -1,6 +1,6 @@
-# kt-vibe-lsp
+# ktpls
 
-A Kotlin language server written in Go, structured after
+**ktpls** is a Kotlin language server written in Go, structured after
 [gopls](https://github.com/golang/tools/tree/master/gopls). It parses Kotlin
 with [tree-sitter](https://tree-sitter.github.io/) and resolves symbols
 across the `.kt`/`.kts` files of your workspace. There is no JVM and no
@@ -31,28 +31,33 @@ tree-sitter is a C library, so building needs **CGo and a C compiler**
 while.
 
 ```sh
-make build     # -> bin/kt-vibe-lsp
+make build     # -> bin/ktpls
 make test      # go test -race ./...
 make install   # go install (to $GOBIN or ~/go/bin)
 ```
 
 ## Neovim
 
+The quickest route is the bundled plugin in [`editors/nvim`](editors/nvim),
+which provides the server config and a local Mason registry, so
+`:MasonInstall ktpls` builds it from this checkout. See its README. To
+configure the server by hand instead:
+
 Neovim ≥ 0.11:
 
 ```lua
-vim.lsp.config('kt_vibe_lsp', {
-  cmd = { 'kt-vibe-lsp', 'serve', '-logfile', '/tmp/kt-vibe-lsp.log' },
+vim.lsp.config('ktpls', {
+  cmd = { 'ktpls', 'serve', '-logfile', '/tmp/ktpls.log' },
   filetypes = { 'kotlin' },
   root_markers = { 'settings.gradle.kts', 'settings.gradle', 'build.gradle.kts', 'build.gradle', '.git' },
 })
-vim.lsp.enable('kt_vibe_lsp')
+vim.lsp.enable('ktpls')
 
 -- Optional: Neovim's built-in completion, triggered as you type.
 vim.api.nvim_create_autocmd('LspAttach', {
   callback = function(args)
     local client = vim.lsp.get_client_by_id(args.data.client_id)
-    if client and client.name == 'kt_vibe_lsp' then
+    if client and client.name == 'ktpls' then
       vim.lsp.completion.enable(true, client.id, args.buf, { autotrigger = true })
     end
   end,
@@ -68,8 +73,8 @@ vim.api.nvim_create_autocmd('FileType', {
   pattern = 'kotlin',
   callback = function(args)
     vim.lsp.start({
-      name = 'kt-vibe-lsp',
-      cmd = { 'kt-vibe-lsp', 'serve', '-logfile', '/tmp/kt-vibe-lsp.log' },
+      name = 'ktpls',
+      cmd = { 'ktpls', 'serve', '-logfile', '/tmp/ktpls.log' },
       root_dir = vim.fs.root(args.buf, { 'settings.gradle.kts', 'settings.gradle', '.git' }),
     })
   end,

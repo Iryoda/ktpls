@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 func newTestSession(t *testing.T, root string) *Session {

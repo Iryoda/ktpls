@@ -6,8 +6,8 @@ import (
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/kotlin"
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/kotlin"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 // A File is one version of a Kotlin source file known to the session.

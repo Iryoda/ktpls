@@ -1,8 +1,10 @@
-# kt-vibe-lsp — Kotlin Language Server in Go
+# ktpls — Kotlin Language Server in Go
+
+Named **ktpls** after gopls: module `github.com/Iryoda/ktpls`, binary, Mason package and Neovim LSP config (the project started as `kt-vibe-lsp`). Entry point: `cmd/ktpls`.
 
 ## Context
 
-Build a Kotlin LSP server in Go (`github.com/Iryoda/kt-vibe-lsp`) for use with Neovim. The repo is greenfield (bare `go.mod` + empty `main.go`). Structure mirrors **gopls** (golang/tools/gopls): CLI → jsonrpc2 transport → protocol dispatch → thin per-feature server layer → session/overlay cache → language-logic package. JetBrains' `Kotlin/kotlin-lsp` is the capabilities reference only (it wraps IntelliJ/K2 — JVM-locked, nothing reusable from Go).
+Build a Kotlin LSP server in Go (`github.com/Iryoda/ktpls`) for use with Neovim. The repo is greenfield (bare `go.mod` + empty `main.go`). Structure mirrors **gopls** (golang/tools/gopls): CLI → jsonrpc2 transport → protocol dispatch → thin per-feature server layer → session/overlay cache → language-logic package. JetBrains' `Kotlin/kotlin-lsp` is the capabilities reference only (it wraps IntelliJ/K2 — JVM-locked, nothing reusable from Go).
 
 **Decisions confirmed with the user:**
 - Capability priority: **1) go to definition, 2) hover with KDoc, 3) completion**; go-to-implementation later.

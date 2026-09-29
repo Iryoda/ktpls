@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 )
 
-// Server is the set of LSP methods implemented by kt-vibe-lsp.
+// Server is the set of LSP methods implemented by ktpls.
 // Methods are added here as capabilities land; Dispatch routes to them.
 type Server interface {
 	Initialize(context.Context, *InitializeParams) (*InitializeResult, error)

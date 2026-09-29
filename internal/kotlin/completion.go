@@ -9,8 +9,8 @@ import (
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/fuzzy"
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/fuzzy"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 // maxCompletions caps the number of items returned; when more match, the

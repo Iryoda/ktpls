@@ -12,7 +12,7 @@ import (
 	tskotlin "github.com/fwcd/tree-sitter-kotlin/bindings/go"
 	ts "github.com/tree-sitter/go-tree-sitter"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 var language = ts.NewLanguage(tskotlin.Language())

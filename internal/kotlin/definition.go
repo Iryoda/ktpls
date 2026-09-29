@@ -3,7 +3,7 @@ package kotlin
 import (
 	ts "github.com/tree-sitter/go-tree-sitter"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 // maxFallback caps the number of by-name candidates returned when a name

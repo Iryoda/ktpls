@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 // completionLib is a second file in every completion test's workspace.

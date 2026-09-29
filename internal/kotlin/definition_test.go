@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 // Marker tests: fixture files under testdata/<dir> annotate declarations

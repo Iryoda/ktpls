@@ -3,9 +3,9 @@ package server
 import (
 	"context"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/cache"
-	"github.com/Iryoda/kt-vibe-lsp/internal/kotlin"
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/cache"
+	"github.com/Iryoda/ktpls/internal/kotlin"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*protocol.Hover, error) {

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/kotlin"
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/kotlin"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 // A Session is the state for one client connection.

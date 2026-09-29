@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/cache"
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/cache"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 // testClient drives a Server over in-memory pipes, like an editor would.

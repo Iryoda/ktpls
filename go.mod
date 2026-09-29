@@ -1,4 +1,4 @@
-module github.com/Iryoda/kt-vibe-lsp
+module github.com/Iryoda/ktpls
 
 go 1.27.1
 

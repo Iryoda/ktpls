@@ -5,8 +5,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/cache"
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/cache"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 func (s *Server) Initialize(ctx context.Context, params *protocol.InitializeParams) (*protocol.InitializeResult, error) {
@@ -38,7 +38,7 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 			HoverProvider:      true,
 			CompletionProvider: &protocol.CompletionOptions{TriggerCharacters: []string{"."}},
 		},
-		ServerInfo: &protocol.ServerInfo{Name: "kt-vibe-lsp", Version: Version},
+		ServerInfo: &protocol.ServerInfo{Name: "ktpls", Version: Version},
 	}, nil
 }
 
@@ -77,7 +77,7 @@ func (s *Server) loadWorkspace() {
 	n, err := s.session.LoadWorkspace(s.ctx)
 	if err != nil {
 		s.log.Error("loading workspace", "err", err)
-		s.logMessage(protocol.MessageError, "kt-vibe-lsp: loading workspace: %v", err)
+		s.logMessage(protocol.MessageError, "ktpls: loading workspace: %v", err)
 		return
 	}
 	withErrors := 0
@@ -90,7 +90,7 @@ func (s *Server) loadWorkspace() {
 	})
 	elapsed := time.Since(start).Round(time.Millisecond)
 	s.log.Info("workspace loaded", "files", n, "withSyntaxErrors", withErrors, "elapsed", elapsed)
-	s.logMessage(protocol.MessageInfo, "kt-vibe-lsp: loaded %d Kotlin files in %v (%d with syntax errors)", n, elapsed, withErrors)
+	s.logMessage(protocol.MessageInfo, "ktpls: loaded %d Kotlin files in %v (%d with syntax errors)", n, elapsed, withErrors)
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {

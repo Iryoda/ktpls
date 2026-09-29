@@ -1,4 +1,4 @@
-// Package cmd implements the kt-vibe-lsp command line.
+// Package cmd implements the ktpls command line.
 package cmd
 
 import (
@@ -9,15 +9,15 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
-	"github.com/Iryoda/kt-vibe-lsp/internal/server"
+	"github.com/Iryoda/ktpls/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/server"
 )
 
-const usage = `kt-vibe-lsp is a Kotlin language server.
+const usage = `ktpls is a Kotlin language server.
 
 Usage:
-  kt-vibe-lsp [serve] [flags]   run the language server on stdin/stdout
-  kt-vibe-lsp version           print the version
+  ktpls [serve] [flags]   run the language server on stdin/stdout
+  ktpls version           print the version
 
 Flags:
 `
@@ -27,14 +27,14 @@ func Main(args []string) int {
 	if len(args) > 0 {
 		switch args[0] {
 		case "version":
-			fmt.Println("kt-vibe-lsp", server.Version)
+			fmt.Println("ktpls", server.Version)
 			return 0
 		case "serve":
 			args = args[1:]
 		}
 	}
 
-	fs := flag.NewFlagSet("kt-vibe-lsp", flag.ContinueOnError)
+	fs := flag.NewFlagSet("ktpls", flag.ContinueOnError)
 	logfile := fs.String("logfile", "", "write logs to this file (default: stderr)")
 	verbose := fs.Bool("v", false, "enable debug logging")
 	showVersion := fs.Bool("version", false, "print the version and exit")
@@ -46,7 +46,7 @@ func Main(args []string) int {
 		return 2
 	}
 	if *showVersion {
-		fmt.Println("kt-vibe-lsp", server.Version)
+		fmt.Println("ktpls", server.Version)
 		return 0
 	}
 
@@ -54,7 +54,7 @@ func Main(args []string) int {
 	if *logfile != "" {
 		f, err := os.OpenFile(*logfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "kt-vibe-lsp: %v\n", err)
+			fmt.Fprintf(os.Stderr, "ktpls: %v\n", err)
 			return 1
 		}
 		defer f.Close()

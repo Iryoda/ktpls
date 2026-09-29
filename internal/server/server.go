@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Iryoda/kt-vibe-lsp/internal/cache"
-	"github.com/Iryoda/kt-vibe-lsp/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/cache"
+	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
 // Version is the server version reported to clients.
