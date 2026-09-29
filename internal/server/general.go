@@ -124,6 +124,15 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// Close releases what the server started: a running build, and the
+// Gradle/Kotlin daemons its builds started.
+func (s *Server) Close() {
+	s.cancel()
+	if s.builder != nil {
+		s.builder.Close()
+	}
+}
+
 func (s *Server) Exit(ctx context.Context) error {
 	s.cancel()
 	select {

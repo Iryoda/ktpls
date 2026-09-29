@@ -8,6 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/Iryoda/ktpls/internal/protocol"
 	"github.com/Iryoda/ktpls/internal/server"
@@ -78,6 +80,8 @@ func serve(log *slog.Logger, r io.Reader, w io.Writer) int {
 
 	errc := make(chan error, 1)
 	go func() { errc <- conn.Run(context.Background(), srv.Handle) }()
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 
 	select {
 	case <-srv.Exited():
@@ -87,7 +91,11 @@ func serve(log *slog.Logger, r io.Reader, w io.Writer) int {
 		} else {
 			log.Info("client closed the connection")
 		}
+	case sig := <-sigs:
+		log.Info("terminated", "signal", sig.String())
 	}
+	// However we exit, stop the build and the daemons it started.
+	srv.Close()
 	if srv.ShutdownReceived() {
 		log.Info("exiting")
 		return 0

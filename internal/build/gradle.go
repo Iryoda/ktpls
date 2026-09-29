@@ -110,6 +110,11 @@ type Runner struct {
 	mu      sync.Mutex
 	running bool
 	again   bool
+	owned   map[int]bool // daemons started by our builds
+	closed  bool
+	ctx     context.Context
+	cancel  context.CancelFunc
+	idle    chan struct{} // closed when no build is running; nil while one is
 }
 
 // NewRunner returns a runner for the project at root, or nil if
@@ -134,36 +139,84 @@ func NewRunner(root string, cfg Config, log *slog.Logger, start func(), done fun
 	for k, v := range cfg.Env {
 		env = append(env, k+"="+v)
 	}
-	return &Runner{root: root, cmd: cmd, tasks: tasks, env: env, log: log, start: start, done: done}
+	return &Runner{root: root, cmd: cmd, tasks: tasks, env: env, log: log, start: start, done: done, owned: map[int]bool{}}
 }
 
 // Request asks for a build as soon as possible.
 func (r *Runner) Request(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.closed {
+		return
+	}
+	if r.cancel == nil {
+		r.ctx, r.cancel = context.WithCancel(ctx)
+	}
 	if r.running {
 		r.again = true
 		return
 	}
 	r.running = true
-	go r.loop(ctx)
+	r.idle = make(chan struct{})
+	go r.loop(r.ctx)
+}
+
+// Close stops a running build and the Gradle and Kotlin daemons our
+// builds started (daemons that were already running, e.g. an IDE's, are
+// left alone). It waits for them to exit.
+func (r *Runner) Close() {
+	r.mu.Lock()
+	r.closed = true
+	if r.cancel != nil {
+		r.cancel()
+	}
+	idle := r.idle
+	r.mu.Unlock()
+	if idle != nil {
+		<-idle // the build's process group is terminated on cancel
+	}
+	r.mu.Lock()
+	owned := r.owned
+	r.owned = map[int]bool{}
+	r.mu.Unlock()
+	for pid := range owned {
+		if isDaemon(pid) {
+			r.log.Info("stopping daemon started by our builds", "pid", pid)
+			terminate(pid)
+		}
+	}
 }
 
 func (r *Runner) loop(ctx context.Context) {
+	defer func() {
+		r.mu.Lock()
+		r.running = false
+		close(r.idle)
+		r.idle = nil
+		r.mu.Unlock()
+	}()
 	for {
+		before := daemonPIDs()
 		res := r.run(ctx)
+		// Daemons that appeared during the build are ours.
+		for pid := range daemonPIDs() {
+			if !before[pid] {
+				r.mu.Lock()
+				r.owned[pid] = true
+				r.mu.Unlock()
+			}
+		}
 		if ctx.Err() != nil {
 			return
 		}
 		r.done(res)
 		r.mu.Lock()
-		if !r.again {
-			r.running = false
-			r.mu.Unlock()
-			return
-		}
+		again := r.again
 		r.again = false
 		r.mu.Unlock()
+		if !again {
+			return
+		}
 	}
 }
 
@@ -175,6 +228,7 @@ func (r *Runner) run(ctx context.Context) Result {
 	cmd := exec.CommandContext(ctx, r.cmd[0], args...)
 	cmd.Dir = r.root
 	cmd.Env = r.env
+	ownProcessGroup(cmd)
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	r.start()
