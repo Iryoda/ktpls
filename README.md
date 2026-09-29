@@ -121,3 +121,22 @@ logfile.
 | `internal/cache` | Session, editor overlays, parsed files (`gopls/internal/cache`) |
 | `internal/kotlin` | Kotlin language logic (`gopls/internal/golang`) |
 | `tools/tsdump` | Dev tool: print a file's syntax tree (`go run ./tools/tsdump File.kt`) |
+
+## License and credits
+
+ktpls is licensed under the [Apache License 2.0](LICENSE). You may use,
+modify and redistribute it freely, including commercially. Redistributions
+and derivative works must keep the [NOTICE](NOTICE) file, which credits the
+projects ktpls builds on:
+
+- [gopls](https://github.com/golang/tools/tree/master/gopls), the model
+  for ktpls's architecture;
+- [fwcd/tree-sitter-kotlin](https://github.com/fwcd/tree-sitter-kotlin),
+  the Kotlin grammar;
+- [tree-sitter](https://github.com/tree-sitter/tree-sitter) and
+  [go-tree-sitter](https://github.com/tree-sitter/go-tree-sitter);
+- [JetBrains Kotlin LSP](https://github.com/Kotlin/kotlin-lsp), the
+  reference for capabilities; and others listed in NOTICE.
+
+The licenses of third-party code compiled into ktpls are in
+[THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).

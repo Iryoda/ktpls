@@ -16,7 +16,7 @@ return {
     name = "ktpls",
     description = "Kotlin language server written in Go: go to definition, hover and completion across the workspace, parsed with tree-sitter.",
     homepage = "file://" .. root,
-    licenses = {},
+    licenses = { "Apache-2.0" },
     languages = { "Kotlin" },
     categories = { "LSP" },
     source = {

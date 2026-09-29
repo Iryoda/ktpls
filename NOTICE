@@ -1,0 +1,55 @@
+ktpls
+Copyright 2026 Iryoda
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+Any redistribution or derivative work must keep this NOTICE file, including
+the credits below (Apache License 2.0, section 4(d)).
+
+
+Credits
+=======
+
+ktpls builds on the work of these projects and resources:
+
+* gopls, the Go language server
+  https://github.com/golang/tools/tree/master/gopls
+  Copyright 2009 The Go Authors. BSD 3-Clause License.
+  The architecture of ktpls is modeled on gopls: the split into command,
+  protocol, server, cache and language packages, one server file per LSP
+  feature, editor-buffer overlays, and byte-offset/UTF-16 position mapping.
+  No gopls source code is included.
+
+* tree-sitter-kotlin, the Kotlin grammar for tree-sitter
+  https://github.com/fwcd/tree-sitter-kotlin
+  Copyright (c) 2019 fwcd. MIT License.
+  Its generated parser and external scanner are compiled into ktpls.
+
+* tree-sitter, the incremental parsing library
+  https://github.com/tree-sitter/tree-sitter
+  Copyright (c) 2018 Max Brunsfeld. MIT License.
+  The parsing runtime, compiled into ktpls through go-tree-sitter.
+
+* go-tree-sitter, the Go bindings for tree-sitter
+  https://github.com/tree-sitter/go-tree-sitter
+  Copyright (c) 2024 Amaan Qureshi. MIT License.
+
+* go-pointer, a dependency of go-tree-sitter
+  https://github.com/mattn/go-pointer
+  Copyright (c) 2019 Yasuhiro Matsumoto. MIT License.
+
+* Kotlin LSP by JetBrains
+  https://github.com/Kotlin/kotlin-lsp
+  The reference for which capabilities a Kotlin language server should
+  offer. No code from it is included.
+
+* The Language Server Protocol specification, by Microsoft
+  https://microsoft.github.io/language-server-protocol/
+  The protocol types of ktpls are written from the specification.
+
+* mason.nvim
+  https://github.com/mason-org/mason.nvim
+  editors/nvim provides a registry in Mason's package format. No code from
+  it is included.
+
+The full license texts of the third-party code compiled into ktpls are in
+THIRD_PARTY_LICENSES.
