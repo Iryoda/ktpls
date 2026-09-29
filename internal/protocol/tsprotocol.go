@@ -1,5 +1,7 @@
 package protocol
 
+import "encoding/json"
+
 // This file holds the hand-written subset of LSP 3.17 types used by the
 // server. Field names and JSON tags follow the specification; only fields
 // the server reads or writes are included.
@@ -100,14 +102,15 @@ type ServerCapabilities struct {
 	HoverProvider      bool                     `json:"hoverProvider,omitempty"`
 	CompletionProvider *CompletionOptions       `json:"completionProvider,omitempty"`
 
-	ImplementationProvider  bool                  `json:"implementationProvider,omitempty"`
-	TypeDefinitionProvider  bool                  `json:"typeDefinitionProvider,omitempty"`
-	ReferencesProvider      bool                  `json:"referencesProvider,omitempty"`
-	CodeActionProvider      bool                  `json:"codeActionProvider,omitempty"`
-	RenameProvider          *RenameOptions        `json:"renameProvider,omitempty"`
-	SignatureHelpProvider   *SignatureHelpOptions `json:"signatureHelpProvider,omitempty"`
-	DocumentSymbolProvider  bool                  `json:"documentSymbolProvider,omitempty"`
-	WorkspaceSymbolProvider bool                  `json:"workspaceSymbolProvider,omitempty"`
+	ImplementationProvider  bool                   `json:"implementationProvider,omitempty"`
+	TypeDefinitionProvider  bool                   `json:"typeDefinitionProvider,omitempty"`
+	ReferencesProvider      bool                   `json:"referencesProvider,omitempty"`
+	CodeActionProvider      bool                   `json:"codeActionProvider,omitempty"`
+	ExecuteCommandProvider  *ExecuteCommandOptions `json:"executeCommandProvider,omitempty"`
+	RenameProvider          *RenameOptions         `json:"renameProvider,omitempty"`
+	SignatureHelpProvider   *SignatureHelpOptions  `json:"signatureHelpProvider,omitempty"`
+	DocumentSymbolProvider  bool                   `json:"documentSymbolProvider,omitempty"`
+	WorkspaceSymbolProvider bool                   `json:"workspaceSymbolProvider,omitempty"`
 }
 
 type TextDocumentSyncKind int
@@ -192,10 +195,35 @@ type CodeActionContext struct {
 }
 
 type CodeAction struct {
-	Title string         `json:"title"`
-	Kind  string         `json:"kind,omitempty"`
-	Edit  *WorkspaceEdit `json:"edit,omitempty"`
+	Title   string         `json:"title"`
+	Kind    string         `json:"kind,omitempty"`
+	Edit    *WorkspaceEdit `json:"edit,omitempty"`
+	Command *Command       `json:"command,omitempty"`
 }
+
+type Command struct {
+	Title     string `json:"title"`
+	Command   string `json:"command"`
+	Arguments []any  `json:"arguments,omitempty"`
+}
+
+type ExecuteCommandOptions struct {
+	Commands []string `json:"commands"`
+}
+
+type ExecuteCommandParams struct {
+	Command   string            `json:"command"`
+	Arguments []json.RawMessage `json:"arguments,omitempty"`
+}
+
+type ShowDocumentParams struct {
+	URI       DocumentURI `json:"uri"`
+	TakeFocus bool        `json:"takeFocus"`
+	Selection *Range      `json:"selection,omitempty"`
+}
+
+// Navigation code actions.
+const Source = "source"
 
 type WorkspaceEdit struct {
 	Changes map[DocumentURI][]TextEdit `json:"changes"`

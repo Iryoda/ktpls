@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Iryoda/ktpls/internal/cache"
+	"github.com/Iryoda/ktpls/internal/kotlin"
 	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
@@ -42,6 +43,7 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 			TypeDefinitionProvider: true,
 			ReferencesProvider:     true,
 			CodeActionProvider:     true,
+			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{Commands: []string{kotlin.OpenCommand}},
 			RenameProvider:         &protocol.RenameOptions{PrepareProvider: true},
 			SignatureHelpProvider: &protocol.SignatureHelpOptions{
 				TriggerCharacters:   []string{"(", ","},

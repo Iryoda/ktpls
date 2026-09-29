@@ -15,12 +15,23 @@ type Action struct {
 	Title string
 	Kind  string
 	Edits []protocol.TextEdit
+	// Open, if set, makes the action a navigation: selecting it opens
+	// this location (through the OpenCommand command).
+	Open *protocol.Location
 }
+
+// OpenCommand is the command of navigation actions. Its argument is a
+// protocol.Location; the server asks the client to show it.
+const OpenCommand = "ktpls.open"
 
 // CodeActions returns the code actions available at offset in f.
 func CodeActions(f *ParsedFile, ix *Index, offset int) []Action {
 	r := &resolver{f: f, ix: ix, src: f.Content}
-	return append(r.addImports(offset), r.nameArguments(offset)...)
+	var out []Action
+	for _, fn := range []func(int) []Action{r.addImports, r.nameArguments, r.testNavigation} {
+		out = append(out, fn(offset)...)
+	}
+	return out
 }
 
 // addImports offers imports for an unresolved name at offset that is

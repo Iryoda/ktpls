@@ -24,6 +24,7 @@ type Server interface {
 	TypeDefinition(context.Context, *TypeDefinitionParams) ([]Location, error)
 	References(context.Context, *ReferenceParams) ([]Location, error)
 	CodeAction(context.Context, *CodeActionParams) ([]CodeAction, error)
+	ExecuteCommand(context.Context, *ExecuteCommandParams) (any, error)
 	PrepareRename(context.Context, *PrepareRenameParams) (*PrepareRenameResult, error)
 	Rename(context.Context, *RenameParams) (*WorkspaceEdit, error)
 	SignatureHelp(context.Context, *SignatureHelpParams) (*SignatureHelp, error)
@@ -121,6 +122,13 @@ func Dispatch(ctx context.Context, s Server, method string, params json.RawMessa
 			return nil, true, err
 		}
 		res, err := s.CodeAction(ctx, &p)
+		return res, true, err
+	case "workspace/executeCommand":
+		var p ExecuteCommandParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.ExecuteCommand(ctx, &p)
 		return res, true, err
 	case "textDocument/prepareRename":
 		var p PrepareRenameParams

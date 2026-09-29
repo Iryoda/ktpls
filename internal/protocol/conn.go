@@ -27,7 +27,8 @@ type Conn struct {
 	w   io.Writer
 	log *slog.Logger
 
-	wmu sync.Mutex // serializes writes
+	wmu    sync.Mutex // serializes writes
+	nextID int        // guarded by wmu
 }
 
 // NewConn returns a connection reading from r and writing to w.
@@ -114,6 +115,21 @@ func (c *Conn) Notify(method string, params any) error {
 		Method  string `json:"method"`
 		Params  any    `json:"params,omitempty"`
 	}{"2.0", method, params})
+}
+
+// Call sends a request to the client without waiting for its response
+// (responses to server requests are read and dropped by Run).
+func (c *Conn) Call(method string, params any) error {
+	c.wmu.Lock()
+	c.nextID++
+	id := c.nextID
+	c.wmu.Unlock()
+	return c.write(struct {
+		JSONRPC string `json:"jsonrpc"`
+		ID      string `json:"id"`
+		Method  string `json:"method"`
+		Params  any    `json:"params,omitempty"`
+	}{"2.0", fmt.Sprintf("ktpls-%d", id), method, params})
 }
 
 func (c *Conn) write(v any) error {

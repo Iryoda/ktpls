@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/Iryoda/ktpls/internal/cache"
 	"github.com/Iryoda/ktpls/internal/kotlin"
@@ -25,11 +26,13 @@ func (s *Server) CodeAction(ctx context.Context, params *protocol.CodeActionPara
 			if !kindRequested(a.Kind, params.Context.Only) {
 				continue
 			}
-			actions = append(actions, protocol.CodeAction{
-				Title: a.Title,
-				Kind:  a.Kind,
-				Edit:  &protocol.WorkspaceEdit{Changes: map[protocol.DocumentURI][]protocol.TextEdit{params.TextDocument.URI: a.Edits}},
-			})
+			action := protocol.CodeAction{Title: a.Title, Kind: a.Kind}
+			if a.Open != nil {
+				action.Command = &protocol.Command{Title: a.Title, Command: kotlin.OpenCommand, Arguments: []any{a.Open}}
+			} else {
+				action.Edit = &protocol.WorkspaceEdit{Changes: map[protocol.DocumentURI][]protocol.TextEdit{params.TextDocument.URI: a.Edits}}
+			}
+			actions = append(actions, action)
 		}
 	})
 	return actions, err
@@ -47,4 +50,20 @@ func kindRequested(kind string, only []string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) ExecuteCommand(ctx context.Context, params *protocol.ExecuteCommandParams) (any, error) {
+	switch params.Command {
+	case kotlin.OpenCommand:
+		if len(params.Arguments) != 1 {
+			return nil, protocol.Errorf(protocol.CodeInvalidParams, "%s: want one location argument", params.Command)
+		}
+		var loc protocol.Location
+		if err := json.Unmarshal(params.Arguments[0], &loc); err != nil {
+			return nil, protocol.Errorf(protocol.CodeInvalidParams, "%s: %v", params.Command, err)
+		}
+		sel := protocol.Range{Start: loc.Range.Start, End: loc.Range.Start}
+		return nil, s.client.Call("window/showDocument", &protocol.ShowDocumentParams{URI: loc.URI, TakeFocus: true, Selection: &sel})
+	}
+	return nil, protocol.Errorf(protocol.CodeInvalidParams, "unknown command %q", params.Command)
 }

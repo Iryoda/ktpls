@@ -376,3 +376,36 @@ func TestSyntaxDiagnostics(t *testing.T) {
 		t.Errorf("after close: %+v", d.Diagnostics)
 	}
 }
+
+func TestOpenCommandShowsDocument(t *testing.T) {
+	c := newTestClient(t)
+	if resp := c.call("initialize", map[string]any{"processId": nil, "rootUri": nil, "capabilities": map[string]any{}}); resp.Error != nil {
+		t.Fatal(resp.Error)
+	}
+	target := protocol.Location{URI: "file:///w/src/test/FooTest.kt", Range: protocol.Range{Start: protocol.Position{Line: 2, Character: 6}}}
+	if resp := c.call("workspace/executeCommand", map[string]any{"command": "ktpls.open", "arguments": []any{target}}); resp.Error != nil {
+		t.Fatal(resp.Error)
+	}
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case msg := <-c.notifications:
+			if msg.Method != "window/showDocument" {
+				continue
+			}
+			if len(msg.ID) == 0 {
+				t.Error("showDocument sent as a notification, want a request")
+			}
+			var p protocol.ShowDocumentParams
+			if err := json.Unmarshal(msg.Params, &p); err != nil {
+				t.Fatal(err)
+			}
+			if p.URI != target.URI || !p.TakeFocus || p.Selection == nil || p.Selection.Start != target.Range.Start {
+				t.Errorf("showDocument %+v", p)
+			}
+			return
+		case <-timeout:
+			t.Fatal("no window/showDocument")
+		}
+	}
+}
