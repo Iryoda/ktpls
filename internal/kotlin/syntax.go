@@ -30,6 +30,51 @@ func Parse(src []byte) *ts.Tree {
 	return p.Parse(src, nil)
 }
 
+// Reparse parses newSrc reusing the tree of oldSrc: the single edit
+// turning oldSrc into newSrc (their common prefix and suffix stay) is
+// applied to a clone of old, so old itself is untouched and may still be
+// in use. The caller must Close the returned tree.
+func Reparse(old *ts.Tree, oldSrc, newSrc []byte) *ts.Tree {
+	prefix := 0
+	for prefix < len(oldSrc) && prefix < len(newSrc) && oldSrc[prefix] == newSrc[prefix] {
+		prefix++
+	}
+	suffix := 0
+	for suffix < len(oldSrc)-prefix && suffix < len(newSrc)-prefix &&
+		oldSrc[len(oldSrc)-1-suffix] == newSrc[len(newSrc)-1-suffix] {
+		suffix++
+	}
+	oldEnd, newEnd := len(oldSrc)-suffix, len(newSrc)-suffix
+	clone := old.Clone()
+	defer clone.Close()
+	clone.Edit(&ts.InputEdit{
+		StartByte:      uint(prefix),
+		OldEndByte:     uint(oldEnd),
+		NewEndByte:     uint(newEnd),
+		StartPosition:  pointAt(oldSrc, prefix),
+		OldEndPosition: pointAt(oldSrc, oldEnd),
+		NewEndPosition: pointAt(newSrc, newEnd),
+	})
+	p := ts.NewParser()
+	defer p.Close()
+	if err := p.SetLanguage(language); err != nil {
+		panic("kotlin: incompatible tree-sitter grammar: " + err.Error())
+	}
+	return p.Parse(newSrc, clone)
+}
+
+// pointAt returns tree-sitter's (row, byte column) for offset off.
+func pointAt(src []byte, off int) ts.Point {
+	row, lineStart := 0, 0
+	for i := 0; i < off; i++ {
+		if src[i] == '\n' {
+			row++
+			lineStart = i + 1
+		}
+	}
+	return ts.Point{Row: uint(row), Column: uint(off - lineStart)}
+}
+
 // A ParsedFile is one version of a source file with its syntax tree.
 type ParsedFile struct {
 	Path    string

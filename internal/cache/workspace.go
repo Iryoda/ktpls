@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -168,7 +169,8 @@ func (s *Session) readFile(path string) *File {
 
 // walk returns the stamps of the Kotlin files under the root.
 func (s *Session) walk(ctx context.Context) (map[string]stamp, error) {
-	ignore := loadGitignore(s.root)
+	ignore := &gitignore{}
+	ignore.load(s.root, "")
 	files := map[string]stamp{}
 	err := filepath.WalkDir(s.root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -182,11 +184,13 @@ func (s *Session) walk(ctx context.Context) (map[string]stamp, error) {
 			return nil
 		}
 		rel, _ := filepath.Rel(s.root, path)
+		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
 			name := d.Name()
 			if strings.HasPrefix(name, ".") || skipDirs[name] || ignore.match(rel, true) {
 				return filepath.SkipDir
 			}
+			ignore.load(path, rel) // its .gitignore applies below it
 			return nil
 		}
 		if !d.Type().IsRegular() || !IsKotlinFile(path) || ignore.match(rel, false) {
@@ -202,67 +206,151 @@ func (s *Session) walk(ctx context.Context) (map[string]stamp, error) {
 	return files, err
 }
 
-// A gitignore holds the patterns of the workspace root's .gitignore. It
-// supports the common subset: comments, name globs (`*.gen.kt`), rooted
-// patterns (`/generated`), directory-only patterns (`tmp/`) and leading
-// `**/`. Negations (`!pattern`) and nested .gitignore files are ignored.
+// A gitignore holds the rules of the .gitignore files seen so far in a
+// walk, outermost first. Each file's rules apply to its directory and
+// below; within the applicable rules, the last match wins, so `!pattern`
+// re-includes. (As in git, a file can't be re-included once its
+// directory is excluded: the walk never enters that directory.)
 type gitignore struct {
-	patterns []gitPattern
+	rules []gitRule
 }
 
-type gitPattern struct {
-	glob    string
-	rooted  bool // contains a slash: matched against the whole relative path
-	dirOnly bool
+type gitRule struct {
+	base     string // directory of the .gitignore, relative to the root ("" for the root)
+	re       *regexp.Regexp
+	negate   bool
+	dirOnly  bool
+	basename bool // no slash in the pattern: it matches the last path element
 }
 
-func loadGitignore(root string) *gitignore {
-	g := &gitignore{}
-	f, err := os.Open(filepath.Join(root, ".gitignore"))
+// load reads dir/.gitignore, whose directory is rel (slash-separated,
+// relative to the root).
+func (g *gitignore) load(dir, rel string) {
+	path := filepath.Join(dir, ".gitignore")
+	info, err := os.Stat(path)
 	if err != nil {
-		return g
+		return
+	}
+	g.rules = append(g.rules, parsedGitignore(path, stampOf(info), rel)...)
+}
+
+// gitignoreCache holds compiled .gitignore files across workspace scans,
+// keyed by path and invalidated by stamp.
+var gitignoreCache sync.Map // path -> cachedGitignore
+
+type cachedGitignore struct {
+	stamp stamp
+	rules []gitRule
+}
+
+func parsedGitignore(path string, st stamp, rel string) []gitRule {
+	if c, ok := gitignoreCache.Load(path); ok && c.(cachedGitignore).stamp == st {
+		return c.(cachedGitignore).rules
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
 	}
 	defer f.Close()
+	var rules []gitRule
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "!") {
-			continue
-		}
-		p := gitPattern{}
-		if strings.HasSuffix(line, "/") {
-			p.dirOnly = true
-			line = strings.TrimSuffix(line, "/")
-		}
-		line = strings.TrimPrefix(line, "**/")
-		if strings.Contains(line, "/") {
-			p.rooted = true
-			line = strings.TrimPrefix(line, "/")
-		}
-		if line != "" {
-			p.glob = line
-			g.patterns = append(g.patterns, p)
+		if r, ok := parseGitRule(sc.Text()); ok {
+			r.base = rel
+			rules = append(rules, r)
 		}
 	}
-	return g
+	gitignoreCache.Store(path, cachedGitignore{st, rules})
+	return rules
 }
 
-// match reports whether the path rel (relative to the root, with the OS
-// separator) is ignored.
-func (g *gitignore) match(rel string, isDir bool) bool {
-	rel = filepath.ToSlash(rel)
-	base := rel[strings.LastIndexByte(rel, '/')+1:]
-	for _, p := range g.patterns {
-		if p.dirOnly && !isDir {
-			continue
-		}
-		target := base
-		if p.rooted {
-			target = rel
-		}
-		if ok, _ := filepath.Match(p.glob, target); ok {
-			return true
+// parseGitRule compiles one .gitignore line.
+func parseGitRule(line string) (gitRule, bool) {
+	line = strings.TrimRight(line, " \t\r")
+	if line == "" || strings.HasPrefix(line, "#") {
+		return gitRule{}, false
+	}
+	var r gitRule
+	if strings.HasPrefix(line, "!") {
+		r.negate, line = true, line[1:]
+	} else if strings.HasPrefix(line, "\\") {
+		line = line[1:] // escaped leading ! or #
+	}
+	if strings.HasSuffix(line, "/") {
+		r.dirOnly, line = true, strings.TrimSuffix(line, "/")
+	}
+	// A slash anywhere but the end anchors the pattern to the
+	// .gitignore's directory; otherwise it matches at any depth.
+	anchored := strings.Contains(line, "/")
+	line = strings.TrimPrefix(line, "/")
+	if line == "" {
+		return gitRule{}, false
+	}
+	r.basename = !anchored && !strings.Contains(line, "**")
+	var b strings.Builder
+	b.WriteString("^")
+	if !anchored && !r.basename {
+		b.WriteString("(?:.*/)?")
+	}
+	for i := 0; i < len(line); i++ {
+		switch c := line[i]; {
+		case strings.HasPrefix(line[i:], "**/"):
+			b.WriteString("(?:.*/)?")
+			i += 2
+		case strings.HasPrefix(line[i:], "/**") && i+3 == len(line):
+			b.WriteString("/.*")
+			i += 2
+		case strings.HasPrefix(line[i:], "**"):
+			b.WriteString(".*")
+			i++
+		case c == '*':
+			b.WriteString("[^/]*")
+		case c == '?':
+			b.WriteString("[^/]")
+		case c == '[':
+			if j := strings.IndexByte(line[i:], ']'); j > 0 {
+				b.WriteString(line[i : i+j+1])
+				i += j
+			} else {
+				b.WriteString("\\[")
+			}
+		case c == '\\' && i+1 < len(line):
+			i++
+			b.WriteString(regexp.QuoteMeta(line[i : i+1]))
+		default:
+			b.WriteString(regexp.QuoteMeta(string(c)))
 		}
 	}
-	return false
+	b.WriteString("$")
+	re, err := regexp.Compile(b.String())
+	if err != nil {
+		return gitRule{}, false
+	}
+	r.re = re
+	return r, true
+}
+
+// match reports whether rel (slash-separated, relative to the root) is
+// ignored.
+func (g *gitignore) match(rel string, isDir bool) bool {
+	ignored := false
+	for _, r := range g.rules {
+		sub := rel
+		if r.base != "" {
+			if !strings.HasPrefix(rel, r.base+"/") {
+				continue
+			}
+			sub = rel[len(r.base)+1:]
+		}
+		if r.dirOnly && !isDir {
+			continue
+		}
+		if r.basename {
+			sub = sub[strings.LastIndexByte(sub, '/')+1:]
+		}
+		if r.re.MatchString(sub) {
+			ignored = !r.negate
+		}
+	}
+	return ignored
 }

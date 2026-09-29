@@ -27,7 +27,9 @@ Tree-sitter gives syntax only (no `go/types` equivalent for Kotlin exists in Go)
 - **Signature help — done.** The call is found in the text (innermost unclosed `(`, skipping strings, stopping at lambdas), resolved like definition; active parameter by comma count or by `name =`; overloads listed, the first fitting one active; varargs absorb trailing arguments.
 - **Type definition — done.** The type of a value (declared or inferred, `it` included); library types yield the workspace types among their arguments.
 - **"Add import" code action — done.** Offered when the name under the cursor doesn't resolve to anything visible from the file (a local, a member of the receiver or an enclosing class, or a same-package/imported top-level declaration) and a top-level declaration of that name exists in another workspace package; after a dot, only extensions.
-- Remaining ideas: nested `.gitignore` files and negations; incremental text sync.
+- **Nested `.gitignore` + negations — done.** Each `.gitignore` applies to its directory and below; patterns compile to regexps (`**`, `?`, classes, escapes); last match wins, so `!pattern` re-includes. Compiled files are cached across rescans by stamp; slash-free patterns match the last path element only. Idle rescan on the corpus: 36 ms.
+- **Incremental parsing — done.** Full-text sync is kept (Neovim sends whole documents anyway); the server diffs old and new text (common prefix/suffix) and reparses incrementally from a clone of the previous tree, so concurrent readers of the old version are unaffected. Largest corpus file (95 KB): 24.7 ms → 4.7 ms per keystroke. A randomized test checks incremental and full parses produce identical trees.
+- All planned milestones are complete.
 
 ## Key design decisions
 

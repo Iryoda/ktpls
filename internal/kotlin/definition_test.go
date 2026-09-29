@@ -297,3 +297,36 @@ func TestExtractWhileTyping(t *testing.T) {
 		}
 	}
 }
+
+// TestReparseMatchesFullParse applies random edits and checks that the
+// incremental reparse yields the same tree as parsing from scratch.
+func TestReparseMatchesFullParse(t *testing.T) {
+	src, err := os.ReadFile("testdata/definition/acme/shapes/Shapes.kt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inserts := []string{"x", "\n", "val y = 1\n", "(", "}", "fun f() {", "", "\"", "// c\n", "😀"}
+	rng := uint64(7)
+	next := func(n int) int { // xorshift: deterministic
+		rng ^= rng << 13
+		rng ^= rng >> 7
+		rng ^= rng << 17
+		return int(rng % uint64(n))
+	}
+	cur := src
+	tree := Parse(cur)
+	defer func() { tree.Close() }()
+	for i := 0; i < 300; i++ {
+		start := next(len(cur) + 1)
+		end := min(len(cur), start+next(8))
+		edited := append(append(append([]byte{}, cur[:start]...), inserts[next(len(inserts))]...), cur[end:]...)
+		incr := Reparse(tree, cur, edited)
+		full := Parse(edited)
+		if a, b := incr.RootNode().ToSexp(), full.RootNode().ToSexp(); a != b {
+			t.Fatalf("edit %d: incremental and full parses differ\n%s\n---\n%s", i, a, b)
+		}
+		full.Close()
+		tree.Close()
+		tree, cur = incr, edited
+	}
+}

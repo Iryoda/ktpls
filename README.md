@@ -44,7 +44,7 @@ Supported:
   work inside lambdas too.
 - Files changed on disk (git checkout, edits made outside the editor) are
   picked up automatically. The workspace walk skips build outputs and
-  honors the root `.gitignore`.
+  honors `.gitignore` files (nested ones and `!` negations included).
 
 Resolution is syntax- and scope-based (there is no type checker), and
 limited to the workspace's own `.kt`/`.kts` files. It does not reach the

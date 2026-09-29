@@ -48,9 +48,15 @@ func (s *Session) Open(path string, version int32, content []byte) {
 	s.put(newFile(path, version, true, content, s.enc))
 }
 
-// Change records new content for an open editor buffer.
+// Change records new content for an open editor buffer, reparsing
+// incrementally from its previous version.
 func (s *Session) Change(path string, version int32, content []byte) {
-	s.put(newFile(path, version, true, content, s.enc))
+	// Reparse under the read lock: prev's tree must not be closed (by a
+	// concurrent put) while it is cloned and reused.
+	s.mu.RLock()
+	f := newFileFrom(s.files[path], path, version, true, content, s.enc)
+	s.mu.RUnlock()
+	s.put(f)
 }
 
 // Close records that an editor buffer was closed: the file reverts to its

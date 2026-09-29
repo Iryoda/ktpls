@@ -165,8 +165,16 @@ func TestRescan(t *testing.T) {
 
 func TestGitignore(t *testing.T) {
 	root := t.TempDir()
-	os.WriteFile(filepath.Join(root, ".gitignore"), []byte("tmp/\n/generated\n*.bak.kt\n**/cache\n!keep.kt\ndocs/api/*.kt\n"), 0o644)
-	g := loadGitignore(root)
+	write := func(rel, content string) {
+		p := filepath.Join(root, rel)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(content), 0o644)
+	}
+	write(".gitignore", "tmp/\n/generated\n*.bak.kt\n**/cache\ndocs/api/*.kt\n*.gen.kt\n!keep.gen.kt\n# comment\n\\#literal.kt\n")
+	write("module/.gitignore", "local/\n/Only.kt\n!/generated2\n")
+	g := &gitignore{}
+	g.load(root, "")
+	g.load(filepath.Join(root, "module"), "module")
 	for _, tt := range []struct {
 		rel   string
 		isDir bool
@@ -181,10 +189,49 @@ func TestGitignore(t *testing.T) {
 		{"a/b/cache", true, true},
 		{"docs/api/A.kt", false, true},
 		{"docs/A.kt", false, false},
+		{"docs/api/sub/A.kt", false, false}, // * doesn't cross directories
 		{"src/Main.kt", false, false},
+		{"src/X.gen.kt", false, true},
+		{"src/keep.gen.kt", false, false}, // negation re-includes
+		{"#literal.kt", false, true},
+		{"module/local", true, true},    // nested .gitignore
+		{"local", true, false},          // ...applies only below its directory
+		{"module/Only.kt", false, true}, // rooted at the nested directory
+		{"module/sub/Only.kt", false, false},
 	} {
-		if got := g.match(filepath.FromSlash(tt.rel), tt.isDir); got != tt.want {
+		if got := g.match(tt.rel, tt.isDir); got != tt.want {
 			t.Errorf("match(%q, dir=%v) = %v, want %v", tt.rel, tt.isDir, got, tt.want)
 		}
+	}
+}
+
+func TestWalkNestedGitignore(t *testing.T) {
+	root := t.TempDir()
+	for rel, content := range map[string]string{
+		".gitignore":      "*.gen.kt\n!Keep.gen.kt\n",
+		"a/A.kt":          "class A\n",
+		"a/X.gen.kt":      "class X\n",
+		"a/Keep.gen.kt":   "class Keep\n",
+		"m/.gitignore":    "fixtures/\n",
+		"m/fixtures/F.kt": "class F\n",
+		"fixtures/Top.kt": "class Top\n", // m's rule doesn't apply here
+	} {
+		p := filepath.Join(root, rel)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(content), 0o644)
+	}
+	s := newTestSession(t, root)
+	files, err := s.walk(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for p := range files {
+		rel, _ := filepath.Rel(root, p)
+		got = append(got, filepath.ToSlash(rel))
+	}
+	slices.Sort(got)
+	if want := []string{"a/A.kt", "a/Keep.gen.kt", "fixtures/Top.kt"}; !slices.Equal(got, want) {
+		t.Errorf("walked %v, want %v", got, want)
 	}
 }

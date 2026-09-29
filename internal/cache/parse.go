@@ -37,7 +37,18 @@ type File struct {
 }
 
 func newFile(path string, version int32, overlay bool, content []byte, enc protocol.PositionEncodingKind) *File {
-	tree := kotlin.Parse(content)
+	return newFileFrom(nil, path, version, overlay, content, enc)
+}
+
+// newFileFrom is newFile reusing the syntax tree of prev (the previous
+// version of an open buffer, or nil) to reparse incrementally.
+func newFileFrom(prev *File, path string, version int32, overlay bool, content []byte, enc protocol.PositionEncodingKind) *File {
+	var tree *ts.Tree
+	if prev != nil && prev.Tree != nil {
+		tree = kotlin.Reparse(prev.Tree, prev.Content, content)
+	} else {
+		tree = kotlin.Parse(content)
+	}
 	m := protocol.NewMapper(content, enc)
 	f := &File{
 		Path:         path,
