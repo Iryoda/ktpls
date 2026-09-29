@@ -45,6 +45,10 @@ type Server struct {
 
 	lastScan time.Time   // guarded by mu
 	scanning atomic.Bool // a background rescan is running
+
+	diagMu    sync.Mutex
+	baselines map[string]map[string]int // open file -> syntax errors present when opened
+	diagTimer map[string]*time.Timer    // open file -> pending publish
 }
 
 // rescanInterval is the minimum time between background rescans of the
@@ -57,12 +61,14 @@ var _ protocol.Server = (*Server)(nil)
 func New(client *protocol.Conn, log *slog.Logger) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
-		client: client,
-		log:    log,
-		ctx:    ctx,
-		cancel: cancel,
-		exited: make(chan struct{}),
-		loaded: make(chan struct{}),
+		client:    client,
+		log:       log,
+		ctx:       ctx,
+		cancel:    cancel,
+		exited:    make(chan struct{}),
+		loaded:    make(chan struct{}),
+		baselines: map[string]map[string]int{},
+		diagTimer: map[string]*time.Timer{},
 	}
 }
 

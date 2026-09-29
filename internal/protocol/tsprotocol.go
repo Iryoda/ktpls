@@ -310,6 +310,30 @@ type Hover struct {
 	Range    *Range        `json:"range,omitempty"`
 }
 
+// --- Diagnostics ---
+
+type DiagnosticSeverity int
+
+const (
+	SeverityError       DiagnosticSeverity = 1
+	SeverityWarning     DiagnosticSeverity = 2
+	SeverityInformation DiagnosticSeverity = 3
+	SeverityHint        DiagnosticSeverity = 4
+)
+
+type Diagnostic struct {
+	Range    Range              `json:"range"`
+	Severity DiagnosticSeverity `json:"severity,omitempty"`
+	Source   string             `json:"source,omitempty"`
+	Message  string             `json:"message"`
+}
+
+type PublishDiagnosticsParams struct {
+	URI         DocumentURI  `json:"uri"`
+	Version     *int32       `json:"version,omitempty"`
+	Diagnostics []Diagnostic `json:"diagnostics"`
+}
+
 // --- Workspace ---
 
 type DidChangeWatchedFilesParams struct {

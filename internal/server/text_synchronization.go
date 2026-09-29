@@ -14,6 +14,7 @@ func (s *Server) DidOpen(ctx context.Context, params *protocol.DidOpenTextDocume
 		return err
 	}
 	s.session.Open(path, params.TextDocument.Version, []byte(params.TextDocument.Text))
+	s.openDiagnostics(path)
 	return nil
 }
 
@@ -33,6 +34,7 @@ func (s *Server) DidChange(ctx context.Context, params *protocol.DidChangeTextDo
 		return fmt.Errorf("didChange %s: %w", path, err)
 	}
 	s.session.Change(path, params.TextDocument.Version, content)
+	s.scheduleDiagnostics(path)
 	return nil
 }
 
@@ -75,5 +77,6 @@ func (s *Server) DidClose(ctx context.Context, params *protocol.DidCloseTextDocu
 		return err
 	}
 	s.session.Close(path)
+	s.closeDiagnostics(path)
 	return nil
 }

@@ -130,6 +130,24 @@ func declaredType(n *ts.Node, src []byte) string {
 	return typeName(child(n, "user_type", "nullable_type", "parenthesized_type"), src)
 }
 
+// declaredTypeText returns the full text of the type annotation among n's
+// direct children, generic arguments included, with whitespace
+// normalized: "List<Account>", "(Int) -> Unit"; "" if none.
+func declaredTypeText(n *ts.Node, src []byte) string {
+	if t := child(n, "user_type", "nullable_type", "parenthesized_type", "function_type"); t != nil {
+		return typeTextOfNode(t, src)
+	}
+	return ""
+}
+
+func typeTextOfNode(t *ts.Node, src []byte) string {
+	s := collapseSpace(text(t, src))
+	for _, r := range []struct{ old, new string }{{"< ", "<"}, {" >", ">"}, {" ,", ","}, {"( ", "("}, {" )", ")"}} {
+		s = strings.ReplaceAll(s, r.old, r.new)
+	}
+	return s
+}
+
 // joinFQ joins a qualifier and a name with a dot.
 func joinFQ(qual, name string) string {
 	if qual == "" {

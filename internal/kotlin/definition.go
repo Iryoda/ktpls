@@ -83,6 +83,18 @@ type resolver struct {
 	f   *ParsedFile
 	ix  *Index
 	src []byte
+
+	// Per-request memos, keyed by syntax node: typing an expression chain
+	// asks for the same subexpressions many times over. An entry is stored
+	// before it is computed, which also cuts cycles.
+	typesMemo map[memoKey][]*Symbol
+	typeMemo  map[uintptr]typeRef
+	nameMemo  map[memoKey][]target
+}
+
+type memoKey struct {
+	node uintptr
+	flag bool
 }
 
 func symbolTargets(syms []*Symbol) []target {
@@ -172,6 +184,20 @@ func (r *resolver) symbolForDecl(decl *ts.Node) *Symbol {
 // resolveName resolves an unqualified name used in expression (or, with
 // typesOnly, type) position.
 func (r *resolver) resolveName(use *ts.Node, name string, typesOnly bool) []target {
+	key := memoKey{use.Id(), typesOnly}
+	if out, ok := r.nameMemo[key]; ok {
+		return out
+	}
+	if r.nameMemo == nil {
+		r.nameMemo = map[memoKey][]target{}
+	}
+	r.nameMemo[key] = nil
+	out := r.resolveNameUncached(use, name, typesOnly)
+	r.nameMemo[key] = out
+	return out
+}
+
+func (r *resolver) resolveNameUncached(use *ts.Node, name string, typesOnly bool) []target {
 	if l := findLocal(use, name, r.src); l != nil {
 		return []target{{local: l}}
 	}
@@ -395,6 +421,7 @@ func (r *resolver) supertypes(fq string) []*Symbol {
 // resolveTypeName resolves a (possibly dotted) type name as written in
 // file sum, inside the given container ("" at top level).
 func (r *resolver) resolveTypeName(name string, sum *FileSummary, container string) []*Symbol {
+	name = baseType(name)
 	if name == "" {
 		return nil
 	}
@@ -592,6 +619,16 @@ func (r *resolver) collectSupertypes(fq string, into map[string]bool) {
 // the type is not declared in the workspace, e.g. "String" for a
 // parameter `s: String` or a string literal; "" if unknown.
 func (r *resolver) knownTypeName(expr *ts.Node, depth int) string {
+	if name := r.declaredTypeName(expr, depth); name != "" {
+		return name
+	}
+	if depth > maxTypeDepth || expr == nil {
+		return ""
+	}
+	return baseType(r.typeOf(expr, depth).text)
+}
+
+func (r *resolver) declaredTypeName(expr *ts.Node, depth int) string {
 	if depth > maxTypeDepth || expr == nil {
 		return ""
 	}
@@ -621,7 +658,7 @@ func (r *resolver) knownTypeName(expr *ts.Node, depth int) string {
 		}
 		t := targets[0]
 		if t.sym != nil {
-			return t.sym.Type
+			return baseType(t.sym.Type)
 		}
 		if t.local != nil {
 			if tn := declaredType(t.local.decl, r.src); tn != "" {
@@ -635,7 +672,7 @@ func (r *resolver) knownTypeName(expr *ts.Node, depth int) string {
 		if callee := expr.NamedChild(0); callee != nil && callee.Kind() == "simple_identifier" {
 			targets := r.resolveName(callee, text(callee, r.src), false)
 			if len(targets) == 1 && targets[0].sym != nil && targets[0].sym.Kind == KindFunction {
-				return targets[0].sym.Type
+				return baseType(targets[0].sym.Type)
 			}
 		}
 	}
@@ -772,7 +809,40 @@ const maxTypeDepth = 8
 
 // typesOf returns the type symbols that expression expr may evaluate to,
 // or that it names (for `Foo.bar`, where Foo is a class or object).
+// Declarations answer first; inference (lambda parameters, collection
+// elements, library calls) fills in the rest.
 func (r *resolver) typesOf(expr *ts.Node, depth int) []*Symbol {
+	if depth > maxTypeDepth || expr == nil {
+		return nil
+	}
+	key := memoKey{expr.Id(), false}
+	if out, ok := r.typesMemo[key]; ok {
+		return out
+	}
+	if r.typesMemo == nil {
+		r.typesMemo = map[memoKey][]*Symbol{}
+	}
+	r.typesMemo[key] = nil
+	out := r.declaredTypesOf(expr, depth)
+	if len(out) == 0 {
+		out = r.resolveRef(r.typeOf(expr, depth))
+	}
+	r.typesMemo[key] = out
+	return out
+}
+
+// resolveRef resolves an inferred type to workspace type symbols.
+func (r *resolver) resolveRef(t typeRef) []*Symbol {
+	if t.text == "" {
+		return nil
+	}
+	if t.sum == nil { // already fully qualified
+		return filterKinds(r.ix.ByFQName(baseType(t.text)), true)
+	}
+	return r.resolveTypeName(t.text, t.sum, t.container)
+}
+
+func (r *resolver) declaredTypesOf(expr *ts.Node, depth int) []*Symbol {
 	if depth > maxTypeDepth || expr == nil {
 		return nil
 	}

@@ -19,10 +19,18 @@ Supported:
   locals, enclosing-class members, named arguments (`name =`), keywords,
   and workspace declarations that aren't imported yet (accepting one adds
   the `import`).
-- **Go to implementation** (`gi`): subtypes of a class or interface, and
-  the overrides of a member.
+- **Go to implementation** (`gi`): from an interface or class (its
+  declaration or any use), the types implementing it; from a method, its
+  overrides.
 - **Find references** (`gr`), including uses through import aliases.
 - **Document outline** and **workspace symbol search**.
+- **Syntax errors** as warnings while you edit. Only errors introduced
+  since the file was opened are reported, so parser gaps on valid code
+  don't show up as noise.
+- **Type inference** for `it` and lambda parameters (`xs.forEach { it. }`,
+  `x?.let { it }`, `for (a in xs)`, `xs.first()`, `map[key]`, and
+  workspace functions taking lambdas), so definition, hover and completion
+  work inside lambdas too.
 - Files changed on disk (git checkout, edits made outside the editor) are
   picked up automatically. The workspace walk skips build outputs and
   honors the root `.gitignore`.

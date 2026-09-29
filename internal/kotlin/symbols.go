@@ -65,7 +65,8 @@ type Symbol struct {
 	Companion bool   // a companion object
 
 	// Type is the declared type of a property, the return type of a
-	// function, or a cheaply inferred type (`val x = Foo()`); "" if unknown.
+	// function, or a cheaply inferred type (`val x = Foo()`), as written
+	// with generic arguments ("List<Account>"); "" if unknown.
 	Type string
 	// Supertypes lists a class or object's supertypes as written
 	// (e.g. "Shape", "a.b.Base").
@@ -188,7 +189,7 @@ func (x *extractor) visit(n *ts.Node, qual, container string) {
 	case "function_declaration":
 		if name := child(n, "simple_identifier"); name != nil {
 			s := x.add(n, name, KindFunction, qual, container)
-			s.Type = declaredType(n, x.src)
+			s.Type = declaredTypeText(n, x.src)
 			s.Receiver = receiverType(n, x.src)
 			s.Params = x.params(child(n, "function_value_parameters"), "parameter")
 		}
@@ -279,7 +280,7 @@ func (x *extractor) classLike(n *ts.Node, container, qual string) {
 			}
 			if pname := child(p, "simple_identifier"); pname != nil {
 				ps := x.add(p, pname, KindProperty, s.FQName, s.FQName)
-				ps.Type = declaredType(p, x.src)
+				ps.Type = declaredTypeText(p, x.src)
 			}
 		}
 	}
@@ -392,7 +393,7 @@ func (x *extractor) property(n *ts.Node, qual, container string) {
 		}
 		s := x.add(n, name, KindProperty, qual, container)
 		s.Receiver = receiverType(n, x.src)
-		s.Type = declaredType(v, x.src)
+		s.Type = declaredTypeText(v, x.src)
 		if s.Type == "" {
 			s.Type = inferredType(n, x.src)
 		}
@@ -412,7 +413,7 @@ func (x *extractor) params(list *ts.Node, kind string) []Param {
 			continue
 		}
 		rng, _ := x.m.OffsetRange(int(name.StartByte()), int(name.EndByte()))
-		out = append(out, Param{Name: text(name, x.src), Type: declaredType(p, x.src), SelectionRange: rng})
+		out = append(out, Param{Name: text(name, x.src), Type: declaredTypeText(p, x.src), SelectionRange: rng})
 	}
 	return out
 }

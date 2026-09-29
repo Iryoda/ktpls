@@ -14,10 +14,16 @@ func Implementation(f *ParsedFile, ix *Index, offset int) []protocol.Location {
 		return nil
 	}
 	r := &resolver{f: f, ix: ix, src: f.Content}
+	return r.implementations(r.resolve(id))
+}
+
+// implementations returns the implementations of the target declarations.
+func (r *resolver) implementations(targets []target) []protocol.Location {
+	ix := r.ix
 	var subs map[string][]*Symbol // built lazily: it scans the whole index
 	var locs []protocol.Location
 	seen := map[*Symbol]bool{}
-	for _, t := range r.resolve(id) {
+	for _, t := range targets {
 		s := t.sym
 		if s == nil {
 			continue

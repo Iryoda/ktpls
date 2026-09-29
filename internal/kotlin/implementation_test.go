@@ -76,3 +76,45 @@ func defAtFunc(t *testing.T, f *ParsedFile, needle string, fn func(int) []string
 }
 
 func itoa(n int) string { return strconv.Itoa(n + 1) }
+
+func TestImplementationFromInterfaceUses(t *testing.T) {
+	// gi works from the interface's declaration and from any use of it.
+	f, ix := parseOne(t, "/w/D.kt", `package p
+
+interface Repo {
+    fun save(x: Int)
+}
+
+class SqlRepo : Repo {
+    override fun save(x: Int) {}
+}
+
+class MemRepo : Repo {
+    override fun save(x: Int) {}
+}
+
+fun use(r: Repo) = r.save(1)
+`)
+	lines := func(needle string) []int {
+		var out []int
+		for _, l := range Implementation(f, ix, strings.Index(string(f.Content), needle)) {
+			out = append(out, int(l.Range.Start.Line)+1)
+		}
+		slices.Sort(out)
+		return out
+	}
+	for needle, want := range map[string][]int{
+		"Repo {":          {7, 11}, // interface declaration
+		"Repo) =":         {7, 11}, // type use
+		"save(1)":         {8, 12}, // method call
+		"save(x: Int)\n}": {8, 12}, // method declaration
+	} {
+		if got := lines(needle); !slices.Equal(got, want) {
+			t.Errorf("%q: got %v, want %v", needle, got, want)
+		}
+	}
+	// Definition stays definition: on the use, the interface method.
+	if locs := Definition(f, ix, strings.Index(string(f.Content), "save(1)")); len(locs) != 1 || locs[0].Range.Start.Line != 3 {
+		t.Errorf("definition of the call: %v", locs)
+	}
+}

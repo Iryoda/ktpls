@@ -23,6 +23,13 @@ func Hover(f *ParsedFile, ix *Index, offset int) *HoverResult {
 	r := &resolver{f: f, ix: ix, src: f.Content}
 	targets := r.resolve(id)
 	if len(targets) == 0 {
+		// The implicit lambda parameter: show its inferred type.
+		if text(id, f.Content) == "it" {
+			if t := r.typeOf(id, 0); t.text != "" {
+				rng, _ := f.Mapper.OffsetRange(int(id.StartByte()), int(id.EndByte()))
+				return &HoverResult{Markdown: "```kotlin\nit: " + t.text + "\n```\n\n*implicit lambda parameter*", Range: rng}
+			}
+		}
 		return nil
 	}
 	md := r.describe(targets[0])
@@ -74,6 +81,14 @@ func (r *resolver) describe(t target) string {
 		decl := t.local.decl
 		sig = Signature(decl, r.src)
 		where = localKind(decl.Kind())
+		if lambda, _ := lambdaParameterIndex(decl); lambda != nil {
+			where = "lambda parameter"
+			if declaredTypeText(decl, r.src) == "" {
+				if tt := r.typeOf(t.local.name, 0); tt.text != "" {
+					sig += ": " + tt.text
+				}
+			}
+		}
 		docNode := decl
 		if decl.Kind() == "variable_declaration" && decl.Parent() != nil && decl.Parent().Kind() == "property_declaration" {
 			docNode = decl.Parent()

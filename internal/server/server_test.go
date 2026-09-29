@@ -28,6 +28,8 @@ type testClient struct {
 
 	mu      sync.Mutex
 	pending map[string]chan *protocol.Message
+
+	notifications chan *protocol.Message // server-to-client notifications (buffered; dropped when full)
 }
 
 func newTestClient(t *testing.T) *testClient {
@@ -37,7 +39,7 @@ func newTestClient(t *testing.T) *testClient {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	conn := protocol.NewConn(clientToServer, serverToClient, log)
 	srv := New(conn, log)
-	c := &testClient{t: t, srv: srv, w: serverIn, pending: map[string]chan *protocol.Message{}}
+	c := &testClient{t: t, srv: srv, w: serverIn, pending: map[string]chan *protocol.Message{}, notifications: make(chan *protocol.Message, 64)}
 	go conn.Run(context.Background(), srv.Handle)
 	go c.readLoop(bufio.NewReader(serverOut))
 	t.Cleanup(func() {
@@ -54,8 +56,15 @@ func (c *testClient) readLoop(r *bufio.Reader) {
 			return
 		}
 		var msg protocol.Message
-		if err := json.Unmarshal(body, &msg); err != nil || msg.Method != "" {
-			continue // notification (e.g. window/logMessage)
+		if err := json.Unmarshal(body, &msg); err != nil {
+			continue
+		}
+		if msg.Method != "" {
+			select {
+			case c.notifications <- &msg:
+			default:
+			}
+			continue
 		}
 		c.mu.Lock()
 		ch := c.pending[string(msg.ID)]
@@ -309,5 +318,61 @@ func TestDefinitionRequest(t *testing.T) {
 	}}
 	if len(locs) != 1 || locs[0] != want {
 		t.Errorf("definition = %+v, want [%+v]", locs, want)
+	}
+}
+
+// nextDiagnostics waits for the next publishDiagnostics notification.
+func (c *testClient) nextDiagnostics() *protocol.PublishDiagnosticsParams {
+	c.t.Helper()
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case msg := <-c.notifications:
+			if msg.Method != "textDocument/publishDiagnostics" {
+				continue
+			}
+			var p protocol.PublishDiagnosticsParams
+			if err := json.Unmarshal(msg.Params, &p); err != nil {
+				c.t.Fatal(err)
+			}
+			return &p
+		case <-timeout:
+			c.t.Fatal("no diagnostics published")
+			return nil
+		}
+	}
+}
+
+func TestSyntaxDiagnostics(t *testing.T) {
+	root := t.TempDir()
+	c := newTestClient(t)
+	if resp := c.call("initialize", map[string]any{"processId": nil, "rootUri": protocol.URIFromPath(root), "capabilities": map[string]any{}}); resp.Error != nil {
+		t.Fatal(resp.Error)
+	}
+	c.notify("initialized", map[string]any{})
+	uri := protocol.URIFromPath(filepath.Join(root, "A.kt"))
+
+	c.notify("textDocument/didOpen", map[string]any{
+		"textDocument": map[string]any{"uri": uri, "languageId": "kotlin", "version": 1, "text": "package a\n\nfun f() = 1\n"},
+	})
+	if d := c.nextDiagnostics(); len(d.Diagnostics) != 0 {
+		t.Errorf("clean file: %+v", d.Diagnostics)
+	}
+
+	c.notify("textDocument/didChange", map[string]any{
+		"textDocument":   map[string]any{"uri": uri, "version": 2},
+		"contentChanges": []map[string]any{{"text": "package a\n\nfun f( = 1\n"}},
+	})
+	d := c.nextDiagnostics()
+	if len(d.Diagnostics) == 0 || d.Version == nil || *d.Version != 2 {
+		t.Fatalf("broken file: %+v", d)
+	}
+	if got := d.Diagnostics[0]; got.Source != "ktpls" || got.Severity != protocol.SeverityWarning || got.Range.Start.Line != 2 {
+		t.Errorf("diagnostic: %+v", got)
+	}
+
+	c.notify("textDocument/didClose", map[string]any{"textDocument": map[string]any{"uri": uri}})
+	if d := c.nextDiagnostics(); len(d.Diagnostics) != 0 {
+		t.Errorf("after close: %+v", d.Diagnostics)
 	}
 }

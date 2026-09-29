@@ -153,7 +153,10 @@ class B {
     fun run() {}
 }
 
-fun f(xs: List<A>) = xs.forEach { it.run() }
+fun f() {
+    val x = fromLibrary()
+    x.run()
+}
 `)
 	h := Hover(f, ix, strings.LastIndex(string(f.Content), "run"))
 	if h == nil || !strings.HasSuffix(h.Markdown, "_+1 other candidate_") {
