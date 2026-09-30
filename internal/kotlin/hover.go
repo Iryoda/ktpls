@@ -2,6 +2,7 @@ package kotlin
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/Iryoda/ktpls/internal/protocol"
@@ -34,7 +35,7 @@ func Hover(f *ParsedFile, ix *Index, offset int) *HoverResult {
 		if text(id, f.Content) == "it" {
 			if t := r.typeOf(id, 0); t.text != "" {
 				rng, _ := f.Mapper.OffsetRange(int(id.StartByte()), int(id.EndByte()))
-				return &HoverResult{Markdown: "```kotlin\nit: " + t.text + "\n```\n\n*implicit lambda parameter*", Range: rng,
+				return &HoverResult{Markdown: CodeBlock("it: "+t.text) + "\n\n*implicit lambda parameter*", Range: rng,
 					Local: true, Where: "implicit lambda parameter"}
 			}
 		}
@@ -100,7 +101,7 @@ func (r *resolver) describe(t target) (md, where string) {
 	}
 
 	var b strings.Builder
-	b.WriteString("```kotlin\n" + sig + "\n```")
+	b.WriteString(CodeBlock(sig))
 	if where != "" {
 		b.WriteString("\n\n*" + where + "*")
 	}
@@ -126,3 +127,16 @@ func packageOf(ix *Index, s *Symbol) string {
 	}
 	return ""
 }
+
+// CodeBlock renders a declaration as a Kotlin code block. A parameter
+// (`name: Type`) is not Kotlin on its own, and editors highlight the
+// block by parsing it, so it is shown as the val it is.
+func CodeBlock(sig string) string {
+	if paramLike.MatchString(sig) {
+		sig = "val " + sig
+	}
+	return "```kotlin\n" + sig + "\n```"
+}
+
+// paramLike matches `name: Type`.
+var paramLike = regexp.MustCompile("^(?:[\\p{L}_][\\p{L}\\p{N}_]*|`[^`]+`)\\s*:")

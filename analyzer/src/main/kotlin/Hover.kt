@@ -14,6 +14,11 @@ import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.renderer.base.annotations.KaRendererAnnotationsFilter
 import org.jetbrains.kotlin.analysis.api.renderer.declarations.impl.KaDeclarationRendererForSource
 import org.jetbrains.kotlin.analysis.api.renderer.types.impl.KaTypeRendererForSource
+import org.jetbrains.kotlin.analysis.api.renderer.types.KaTypeRenderer
+import org.jetbrains.kotlin.analysis.api.renderer.types.renderers.KaFlexibleTypeRenderer
+import org.jetbrains.kotlin.analysis.api.symbols.KaConstructorSymbol
+import org.jetbrains.kotlin.analysis.api.types.KaFlexibleType
+import org.jetbrains.kotlin.analysis.utils.printer.PrettyPrinter
 import org.jetbrains.kotlin.analysis.api.resolution.KaCallResolutionSuccess
 import org.jetbrains.kotlin.analysis.api.signatures.KaFunctionSignature
 import org.jetbrains.kotlin.analysis.api.signatures.KaVariableSignature
@@ -68,7 +73,7 @@ fun hover(file: KtFile, offset: Int): HoverInfo? = analyze(file) {
     // An inherited member (e.g. a repository's save): describe the original.
     val symbol = (resolved as? KaCallableSymbol)?.fakeOverrideOriginal ?: resolved
     val decl = symbol as? KaDeclarationSymbol ?: return@analyze null
-    val signature = decl.render(declarationRenderer)
+    val signature = renderDeclaration(decl)
     val callText = call?.signature?.let { renderCall(ref.getReferencedName(), it) }
     val declared = (symbol as? KaCallableSymbol)?.let { renderCall(ref.getReferencedName(), it.asSignature()) }
     val source = findSource(file.project, symbol)
@@ -90,7 +95,7 @@ private fun KaSession.declarationHover(leaf: PsiElement): HoverInfo? {
     val symbol = decl.symbol
     return HoverInfo(
         start = leaf.textRange.startOffset, end = leaf.textRange.endOffset,
-        signature = symbol.render(declarationRenderer),
+        signature = renderDeclaration(symbol),
         call = null,
         container = containerOf(symbol),
         doc = decl.docComment?.text, docLanguage = "kotlin",
@@ -98,26 +103,54 @@ private fun KaSession.declarationHover(leaf: PsiElement): HoverInfo? {
     )
 }
 
+// Everything is rendered as valid Kotlin, since editors highlight hovers
+// by parsing them.
+
+// A Java type as Kotlin code sees it: MutableList<T>, not
+// kotlin.collections.(Mutable)List<T>!.
+private object LowerBound : KaFlexibleTypeRenderer {
+    override fun renderType(analysisSession: KaSession, type: KaFlexibleType, typeRenderer: KaTypeRenderer, printer: PrettyPrinter) {
+        typeRenderer.renderType(analysisSession, type.lowerBound, printer)
+    }
+}
+
+private val hoverTypeRenderer = KaTypeRendererForSource.WITH_SHORT_NAMES.with { flexibleTypeRenderer = LowerBound }
+
 // Declarations without their annotations (@InlineOnly, @SinceKotlin...).
 private val declarationRenderer = KaDeclarationRendererForSource.WITH_SHORT_NAMES.with {
+    typeRenderer = hoverTypeRenderer
     annotationRenderer = annotationRenderer.with { annotationFilter = KaRendererAnnotationsFilter.NONE }
 }
 
-private fun KaSession.render(t: KaType) = t.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT)
+private fun KaSession.render(t: KaType) = t.render(hoverTypeRenderer, Variance.INVARIANT)
 
-// renderCall renders a signature as `Receiver.name(p: T): R`.
+// renderDeclaration renders a declaration; a constructor as the function
+// it is: fun <T> Box(value: T): Box<T>.
+private fun KaSession.renderDeclaration(symbol: KaDeclarationSymbol): String {
+    if (symbol is KaConstructorSymbol) {
+        val name = symbol.containingClassId?.shortClassName?.asString() ?: "constructor"
+        val params = symbol.typeParameters.map { it.name.asString() }
+        val typeParams = if (params.isEmpty()) "" else params.joinToString(", ", "<", "> ")
+        return renderCall(name, symbol.asSignature()).replaceFirst("fun ", "fun $typeParams")
+    }
+    return symbol.render(declarationRenderer)
+}
+
+// renderCall renders a signature as `fun Receiver.name(p: T): R` (or
+// `val Receiver.name: R`).
 private fun KaSession.renderCall(name: String, sig: org.jetbrains.kotlin.analysis.api.signatures.KaCallableSignature<*>): String {
     val receiver = sig.receiverType?.let { render(it) + "." } ?: ""
     return when (sig) {
-        is KaFunctionSignature<*> -> receiver + name + sig.valueParameters.joinToString(", ", "(", ")") {
+        is KaFunctionSignature<*> -> "fun " + receiver + name + sig.valueParameters.joinToString(", ", "(", ")") {
             "${it.name.asString()}: ${render(it.returnType)}"
         } + ": " + render(sig.returnType)
-        is KaVariableSignature<*> -> receiver + name + ": " + render(sig.returnType)
+        is KaVariableSignature<*> -> "val " + receiver + name + ": " + render(sig.returnType)
         else -> receiver + name
     }
 }
 
 private fun containerOf(symbol: KaSymbol): String? = when (symbol) {
+    is KaConstructorSymbol -> symbol.containingClassId?.asFqNameString()
     is KaCallableSymbol -> symbol.callableId?.let { it.classId?.asFqNameString() ?: it.packageName.asString() }
     is KaClassLikeSymbol -> symbol.classId?.let { it.outerClassId?.asFqNameString() ?: it.packageFqName.asString() }
     else -> null

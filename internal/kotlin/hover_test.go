@@ -73,7 +73,7 @@ func TestHover(t *testing.T) {
 		{
 			name:   "named argument",
 			needle: "name = \"x\"",
-			want:   "```kotlin\nname: String\n```\n\n*parameter of `greet`*",
+			want:   "```kotlin\nval name: String\n```\n\n*parameter of `greet`*",
 		},
 		{
 			name:   "KDoc separated by two blank lines does not attach",
@@ -116,7 +116,7 @@ func TestHover(t *testing.T) {
 		{
 			name:   "parameter",
 			needle: "box.count",
-			want:   "```kotlin\nbox: Box<String>\n```\n\n*parameter*",
+			want:   "```kotlin\nval box: Box<String>\n```\n\n*parameter*",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -204,5 +204,20 @@ func TestRenderKDocLinks(t *testing.T) {
 	want := "Returns the value if this is success, see `getOrNull` and [docs](https://kotl.in)."
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestCodeBlock(t *testing.T) {
+	for sig, want := range map[string]string{
+		"query: Query":          "val query: Query",
+		"`my param`: Int":       "val `my param`: Int",
+		"val x: Int":            "val x: Int",
+		"fun f(a: Int): String": "fun f(a: Int): String",
+		"inline fun <T> Result<T>.getOrThrow(): T": "inline fun <T> Result<T>.getOrThrow(): T",
+		"class LoggerFactory":                      "class LoggerFactory",
+	} {
+		if got := CodeBlock(sig); got != "```kotlin\n"+want+"\n```" {
+			t.Errorf("CodeBlock(%q) = %q, want %q", sig, got, want)
+		}
 	}
 }

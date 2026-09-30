@@ -46,7 +46,7 @@ func (s *Server) analyzerLocalHover(ctx context.Context, path string, pos protoc
 	if err != nil {
 		return nil
 	}
-	md := "```kotlin\n" + h.Signature + "\n```"
+	md := kotlin.CodeBlock(h.Signature)
 	if where != "" {
 		md += "\n\n*" + where + "*"
 	}
@@ -117,7 +117,7 @@ func (s *Server) analyzerResolve(ctx context.Context, path string, pos protocol.
 // the declaration, where it is, and its docs.
 func hoverMarkdown(h *analyzer.HoverInfo) string {
 	var b strings.Builder
-	b.WriteString("```kotlin\n" + h.Signature + "\n```")
+	b.WriteString(kotlin.CodeBlock(h.Signature))
 	if h.Call != "" {
 		b.WriteString("\n\n*in this call:*\n```kotlin\n" + h.Call + "\n```")
 	}
