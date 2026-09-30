@@ -1,16 +1,10 @@
 import com.intellij.openapi.util.Disposer
-import com.intellij.core.CoreApplicationEnvironment
-import com.intellij.psi.PsiManager
-import com.intellij.psi.PsiTreeChangeListener
-import com.intellij.psi.AbstractFileViewProvider
-import com.intellij.psi.impl.source.PsiFileImpl
 import org.jetbrains.kotlin.allopen.AllOpenComponentRegistrar
 import org.jetbrains.kotlin.allopen.AllOpenConfigurationKeys
 import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.components.KaDiagnosticCheckerFilter
 import org.jetbrains.kotlin.analysis.api.diagnostics.KaSeverity
-import org.jetbrains.kotlin.analysis.api.platform.modification.publishModuleOutOfBlockModificationEvent
 import org.jetbrains.kotlin.analysis.api.projectStructure.KaSourceModule
 import org.jetbrains.kotlin.analysis.api.standalone.StandaloneAnalysisAPISession
 import org.jetbrains.kotlin.analysis.api.standalone.buildStandaloneAnalysisAPISession
@@ -22,6 +16,8 @@ import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtPsiFactory
+import org.jetbrains.kotlin.analysis.api.projectStructure.contextModule
 import java.io.File
 import java.nio.file.Path
 import kotlin.io.path.Path
@@ -55,13 +51,13 @@ fun pluginConfiguration(model: Model): CompilerConfiguration {
     return config
 }
 
-fun buildSession(model: Model, jdkHome: String): StandaloneAnalysisAPISession {
+fun buildSession(model: Model, jdkHome: String, disposable: com.intellij.openapi.Disposable): StandaloneAnalysisAPISession {
     val mainSources = model.paths("KTPLS-SOURCES", "main")
     val testSources = model.paths("KTPLS-SOURCES", "test")
     // Only jars: the build's class directories would shadow the sources.
     val mainCp = model.paths("KTPLS-CLASSPATH", "main").filter { it.toString().endsWith(".jar") }
     val testCp = model.paths("KTPLS-CLASSPATH", "test").filter { it.toString().endsWith(".jar") }
-    return buildStandaloneAnalysisAPISession(Disposer.newDisposable("ktpls")) {
+    return buildStandaloneAnalysisAPISession(disposable) {
         // Public in bytecode but not visible to Kotlin callers.
         javaClass.getMethod("registerCompilerPluginServices", CompilerConfiguration::class.java)
             .invoke(this, pluginConfiguration(model))
@@ -118,28 +114,25 @@ fun usedMb(): Long {
     return (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
 }
 
-class Workspace(val session: StandaloneAnalysisAPISession) {
-    init {
-        // Standalone mode doesn't register the extension point that
-        // PsiManager.reloadFromDisk notifies.
-        CoreApplicationEnvironment.registerExtensionPoint(
-            session.project.extensionArea, "com.intellij.psi.treeChangeListener", PsiTreeChangeListener::class.java,
-        )
-    }
+// A session over the project as it was on disk when it was built.
+class Workspace(model: Model, jdkHome: String) {
+    private val disposable = Disposer.newDisposable("ktpls-session")
+    val session = buildSession(model, jdkHome, disposable)
     private val moduleOf = session.modulesWithFiles.flatMap { (m, fs) -> fs.map { it to m } }.toMap()
     val files: List<KtFile> = moduleOf.keys.filterIsInstance<KtFile>()
 
     fun file(pathSuffix: String): KtFile = files.first { it.virtualFile.path.endsWith(pathSuffix) }
 
-    // A file was saved: drop its cached text and syntax tree so they are
-    // re-read from disk, and invalidate the analysis caches of its module
-    // (the file's declarations may have changed).
-    fun saved(file: KtFile): KtFile {
-        (file.viewProvider as AbstractFileViewProvider).onContentReload()
-        (file as PsiFileImpl).onContentReload()
-        (moduleOf[file] as KaSourceModule).publishModuleOutOfBlockModificationEvent()
-        return file
+    // Diagnostics for new text of a file, at once: the text is analyzed as
+    // an in-memory copy in the file's module, against the rest of the
+    // project as of this session.
+    fun check(file: KtFile, text: String): List<Diag> {
+        val copy = KtPsiFactory(session.project).createFile(file.name, text)
+        copy.contextModule = moduleOf.getValue(file)
+        return diagnose(copy)
     }
+
+    fun close() = Disposer.dispose(disposable)
 }
 
 fun errorsOf(ds: List<Diag>) = ds.filter { it.severity == KaSeverity.ERROR }
@@ -158,7 +151,7 @@ fun main(args: Array<String>) {
 fun run(args: Array<String>) {
     val model = Model(args[0])
     lateinit var ws: Workspace
-    val tSession = measureTimeMillis { ws = Workspace(buildSession(model, args[1])) }
+    val tSession = measureTimeMillis { ws = Workspace(model, args[1]) }
     println("session built in ${tSession}ms: ${ws.files.size} Kotlin files, heap ${usedMb()}MB")
 
     // Every file, as on startup: code that compiles should have no errors.
@@ -189,32 +182,34 @@ fun run(args: Array<String>) {
 
 fun saveTests(ws: Workspace, a: KtFile, b: KtFile, aPath: File, bPath: File, aText: String, bText: String, args: Array<String>) {
 
-    fun save(file: File, text: String, psi: KtFile, label: String, check: (List<Diag>) -> String): KtFile {
+    // Instant check of a saved file's new text in the current session.
+    fun check(file: File, text: String, psi: KtFile, label: String) {
         file.writeText(text)
-        lateinit var fresh: KtFile
         lateinit var ds: List<Diag>
-        val t = measureTimeMillis {
-            fresh = ws.saved(psi)
-            ds = diagnose(fresh)
-        }
-        println("save: %-44s %4dms  %s".format(label, t, check(ds)))
-        return fresh
+        val t = measureTimeMillis { ds = ws.check(psi, text) }
+        println("instant: %-40s %5dms  errors=%s".format(label, t, errorsOf(ds).map { it.factory }))
     }
 
     // 1. An error introduced and fixed in one file.
-    var aPsi = save(aPath, aText + "\nval ktplsProbe: Int = \"not an int\"\n", a, "A with a type error") { ds ->
-        "errors=" + errorsOf(ds).map { it.factory }
-    }
-    aPsi = save(aPath, aText, aPsi, "A fixed") { ds -> "errors=" + errorsOf(ds).map { it.factory } }
+    check(aPath, aText + "\nval ktplsProbe: Int = \"not an int\"\n", a, "A with a type error")
+    check(aPath, aText, a, "A fixed")
 
     // 2. Across files: B calls a function A doesn't declare yet...
-    var bPsi = save(bPath, bText + "\nfun ktplsUse() = ktplsNewFunction()\n", b, "B calls a missing function") { ds ->
-        "errors=" + errorsOf(ds).map { it.factory }
-    }
-    // ...then A is saved declaring it: B's error must go away.
-    aPsi = save(aPath, aText + "\nfun ktplsNewFunction() = 1\n", aPsi, "A declares it") { ds -> "errors in A=" + errorsOf(ds).map { it.factory } }
-    val tB = measureTimeMillis { bPsi = ws.file(args[3]) }
-    val bErrors = errorsOf(diagnose(bPsi))
-    println("       B re-analyzed after A's save:               errors=${bErrors.map { it.factory }}")
+    check(bPath, bText + "\nfun ktplsUse() = ktplsNewFunction()\n", b, "B calls a missing function")
+    // ...then A is saved declaring it. The instant check sees A alone; B
+    // catches up when the session is rebuilt in the background.
+    check(aPath, aText + "\nfun ktplsNewFunction() = 1\n", a, "A declares it")
 
+    lateinit var fresh: Workspace
+    val tRebuild = measureTimeMillis {
+        ws.close()
+        fresh = Workspace(Model(args[0]), args[1])
+    }
+    lateinit var bErrors: List<Diag>
+    val tB = measureTimeMillis { bErrors = errorsOf(diagnose(fresh.file(args[3]))) }
+    println("rebuild: session %dms, then B analyzed in %dms: errors=%s".format(tRebuild, tB, bErrors.map { it.factory }))
+    lateinit var aErrors: List<Diag>
+    val tA = measureTimeMillis { aErrors = errorsOf(diagnose(fresh.file(args[2]))) }
+    println("         A analyzed in %dms: errors=%s; heap %dMB".format(tA, aErrors.map { it.factory }, usedMb()))
+    fresh.close()
 }
