@@ -59,9 +59,17 @@ func (s *Server) analyzerLocalHover(ctx context.Context, path string, pos protoc
 // analyzerDefinition finds a library declaration with the analyzer: in
 // its sources jar, extracted for the editor to open.
 func (s *Server) analyzerDefinition(ctx context.Context, path string, pos protocol.Position) []protocol.Location {
-	h, _, _ := s.analyzerResolve(ctx, path, pos)
+	h, text, mapper := s.analyzerResolve(ctx, path, pos)
 	if h == nil || h.Source == nil {
 		return nil
+	}
+	if h.Source.Path == "" && h.Source.Jar == "" { // in this file, as it is in the editor
+		off := textutil.UTF16ToByte(text, h.Source.Offset)
+		rng, err := mapper.OffsetRange(off, off)
+		if err != nil {
+			return nil
+		}
+		return []protocol.Location{{URI: protocol.URIFromPath(path), Range: rng}}
 	}
 	file, err := analyzer.SourceFile(h.Source)
 	if err != nil {

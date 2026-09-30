@@ -14,6 +14,7 @@ func (s *Server) Definition(ctx context.Context, params *protocol.DefinitionPara
 		return nil, err
 	}
 	var locs []protocol.Location
+	guess := false
 	s.session.Read(func(sn *cache.Snapshot) {
 		var f *kotlin.ParsedFile
 		var release func()
@@ -24,11 +25,15 @@ func (s *Server) Definition(ctx context.Context, params *protocol.DefinitionPara
 		if locs = s.messageDefinition(sn, path, params.Position); locs != nil {
 			return
 		}
-		locs = kotlin.Definition(f, sn.Index(), f.Mapper.PositionOffset(params.Position))
+		locs, guess = kotlin.DefinitionGuess(f, sn.Index(), f.Mapper.PositionOffset(params.Position))
 	})
-	if len(locs) == 0 && err == nil {
-		// A library declaration, most likely: ask the compiler.
-		locs = s.analyzerDefinition(ctx, path, params.Position)
+	if err != nil || len(locs) > 0 && !guess {
+		return locs, err
 	}
-	return locs, err
+	// A library declaration, or one found by name alone (the receiver's
+	// type is unknown): the compiler knows which it is.
+	if exact := s.analyzerDefinition(ctx, path, params.Position); len(exact) > 0 {
+		return exact, nil
+	}
+	return locs, nil
 }

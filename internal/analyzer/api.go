@@ -75,8 +75,9 @@ type HoverInfo struct {
 	Source      *Source `json:"source"`
 }
 
-// A Source is where a declaration is: a project file (Jar empty), or an
-// entry of a library's sources jar. Offset is in UTF-16 code units.
+// A Source is where a declaration is: a project file (Jar empty; Path
+// empty for the file asked about, in the text sent), or an entry of a
+// library's sources jar. Offset is in UTF-16 code units.
 type Source struct {
 	Path   string `json:"path"`
 	Jar    string `json:"jar"`

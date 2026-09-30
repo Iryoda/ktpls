@@ -75,7 +75,7 @@ fun hover(file: KtFile, offset: Int): HoverInfo? = analyze(file) {
     val signature = renderDeclaration(decl)
     val callText = call?.signature?.let { renderCall(ref.getReferencedName(), it) }
     val declared = (symbol as? KaCallableSymbol)?.let { renderCall(ref.getReferencedName(), it.asSignature()) }
-    val source = findSource(file.project, symbol)
+    val source = findSource(file, symbol)
     HoverInfo(
         start = ref.textRange.startOffset, end = ref.textRange.endOffset,
         signature = signature,
@@ -158,17 +158,51 @@ class FoundSource(val location: SourceLocation, val doc: String?, val language: 
 
 // findSource finds a declaration's source: in the project, or in the
 // sources jar next to the library jar holding its class.
-private fun KaSession.findSource(project: Project, symbol: KaSymbol): FoundSource? {
+// A SourceLocation with an empty path is in the file being analyzed (the
+// in-memory copy of the buffer), at an offset into its text.
+private fun KaSession.findSource(file: KtFile, symbol: KaSymbol): FoundSource? {
+    val project = file.project
     val psi = symbol.psi
+    if (psi != null && psi.containingFile == file) {
+        return FoundSource(SourceLocation("", null, null, psi.textOffset), (psi as? KtDeclaration)?.docComment?.text, "kotlin")
+    }
     val vf = psi?.containingFile?.virtualFile
     if (psi != null && vf != null && !vf.path.contains("!/")) { // a project file
         val doc = (psi as? KtDeclaration)?.docComment?.text ?: (psi as? PsiJavaDocumentedElement)?.docComment?.text
         return FoundSource(SourceLocation(vf.path, null, null, psi.textOffset), doc, if (vf.path.endsWith(".java")) "java" else "kotlin")
     }
-    // The class file: from the PSI (Java classes), or found in the
-    // library's jars by its JVM name (Kotlin declarations have no PSI).
-    val (jarPath, entry) = if (vf != null) {
-        vf.path.split("!/", limit = 2).let { it[0] to it[1] }
+    val name = when (symbol) {
+        is KaCallableSymbol -> symbol.callableId?.callableName?.asString()
+        is KaClassLikeSymbol -> symbol.classId?.shortClassName?.asString()
+        else -> null
+    } ?: return null
+    val owner = (symbol as? KaCallableSymbol)?.callableId?.classId?.relativeClassName?.pathSegments()?.map { it.asString() }
+        ?: (symbol as? KaClassLikeSymbol)?.classId?.relativeClassName?.pathSegments()?.dropLast(1)?.map { it.asString() }.orEmpty()
+    val params = (symbol as? KaFunctionSymbol)?.valueParameters?.map { it.name.asString() }
+    val extension = (symbol as? KaCallableSymbol)?.isExtension == true
+    val candidates = classFileCandidates(symbol, vf?.path) ?: builtinCandidates(symbol) ?: return null
+    var fallback: FoundSource? = null
+    for ((sources, candidate) in candidates) {
+        val text = Sources.read(sources, candidate) ?: continue
+        val found = if (candidate.endsWith(".java")) javaDeclaration(project, candidate, text, owner, name, params)
+        else kotlinDeclaration(project, candidate, text, owner, name, params, extension)
+        found ?: continue
+        val doc = (found as? KtDeclaration)?.docComment?.text ?: (found as? PsiJavaDocumentedElement)?.docComment?.text
+        val result = FoundSource(SourceLocation(sources, sources, candidate, found.textOffset), doc,
+            if (candidate.endsWith(".java")) "java" else "kotlin")
+        if (doc != null) return result // e.g. the expect declaration has the docs, not the actual one
+        if (fallback == null) fallback = result
+    }
+    return fallback
+}
+
+// classFileCandidates returns the sources jar entries that may declare a
+// library symbol, from its class file: found from the PSI (Java classes),
+// or in the library's jars by its JVM name (Kotlin declarations have no
+// PSI). Null if there is no class file.
+private fun KaSession.classFileCandidates(symbol: KaSymbol, psiPath: String?): List<Pair<String, String>>? {
+    val (jarPath, entry) = if (psiPath != null) {
+        psiPath.split("!/", limit = 2).let { it[0] to it[1] }
     } else {
         val cls = jvmClassOf(symbol) ?: return null
         val entry = "$cls.class"
@@ -182,28 +216,24 @@ private fun KaSession.findSource(project: Project, symbol: KaSymbol): FoundSourc
     val sourceFiles = info.parts.mapNotNull { part -> Sources.readBytes(jarPath, "$part.class")?.let { classInfo(it).sourceFile } } +
         listOfNotNull(info.sourceFile ?: entry.substringAfterLast('/').substringBefore('$').removeSuffix(".class") + ".java")
     val pkgDir = entry.substringBeforeLast('/', "")
-    val name = when (symbol) {
-        is KaCallableSymbol -> symbol.callableId?.callableName?.asString()
-        is KaClassLikeSymbol -> symbol.classId?.shortClassName?.asString()
+    return sourceFiles.distinct().flatMap { Sources.entries(sources, it, pkgDir) }.map { sources to it }
+}
+
+// builtinCandidates returns the stdlib sources declaring a built-in class
+// (or a member of one): Int, String, ByteArray and the like have no class
+// file of their own.
+private fun builtinCandidates(symbol: KaSymbol): List<Pair<String, String>>? {
+    val classId = when (symbol) {
+        is KaCallableSymbol -> symbol.callableId?.classId
+        is KaClassLikeSymbol -> symbol.classId
         else -> null
     } ?: return null
-    val owner = (symbol as? KaCallableSymbol)?.callableId?.classId?.relativeClassName?.pathSegments()?.map { it.asString() }
-        ?: (symbol as? KaClassLikeSymbol)?.classId?.relativeClassName?.pathSegments()?.dropLast(1)?.map { it.asString() }.orEmpty()
-    val params = (symbol as? KaFunctionSymbol)?.valueParameters?.map { it.name.asString() }
-    val extension = (symbol as? KaCallableSymbol)?.isExtension == true
-    var fallback: FoundSource? = null
-    for (candidate in sourceFiles.distinct().flatMap { Sources.entries(sources, it, pkgDir) }) {
-        val text = Sources.read(sources, candidate) ?: continue
-        val found = if (candidate.endsWith(".java")) javaDeclaration(project, candidate, text, owner, name, params)
-        else kotlinDeclaration(project, candidate, text, owner, name, params, extension)
-        found ?: continue
-        val doc = (found as? KtDeclaration)?.docComment?.text ?: (found as? PsiJavaDocumentedElement)?.docComment?.text
-        val result = FoundSource(SourceLocation(sources, sources, candidate, found.textOffset), doc,
-            if (candidate.endsWith(".java")) "java" else "kotlin")
-        if (doc != null) return result // e.g. the expect declaration has the docs, not the actual one
-        if (fallback == null) fallback = result
-    }
-    return fallback
+    val pkg = classId.packageFqName.asString()
+    if (pkg != "kotlin" && !pkg.startsWith("kotlin.")) return null
+    val top = classId.relativeClassName.pathSegments().first().asString()
+    return Sources.stdlib.mapNotNull { Sources.jarFor(it) }.flatMap { sources ->
+        Sources.declaring(sources, pkg, top).map { sources to it }
+    }.ifEmpty { null }
 }
 
 // jvmClassOf returns the internal name of the class file holding a
@@ -294,6 +324,37 @@ private fun javaDeclaration(project: Project, name: String, text: String, owner:
 
 // Sources finds and reads libraries' sources jars.
 object Sources {
+    // The Kotlin standard library's jars on the classpath, for built-ins.
+    @Volatile var stdlib: List<String> = emptyList()
+    private val declared = HashMap<String, Map<String, List<String>>>()
+
+    // declaring returns the .kt entries of a sources jar declaring the
+    // top-level class pkg.name.
+    fun declaring(jar: String, pkg: String, name: String): List<String> = synchronized(this) {
+        declared.getOrPut(jar) { indexDeclarations(jar) }["$pkg.$name"].orEmpty()
+    }
+
+    private val packageRe = Regex("""^package\s+([\w.]+)""", RegexOption.MULTILINE)
+    private val classRe = Regex(
+        """^(?:(?:public|internal|expect|actual|sealed|abstract|open|final|data|value|inline|enum|annotation|fun)\s+)*(?:class|interface|object)\s+([A-Za-z_]\w*)""",
+        RegexOption.MULTILINE,
+    )
+
+    private fun indexDeclarations(jar: String): Map<String, List<String>> = try {
+        ZipFile(jar).use { z ->
+            val out = HashMap<String, MutableList<String>>()
+            for (e in z.entries()) {
+                if (e.isDirectory || !e.name.endsWith(".kt")) continue
+                val text = z.getInputStream(e).readBytes().toString(Charsets.UTF_8)
+                val pkg = packageRe.find(text)?.groupValues?.get(1).orEmpty()
+                for (m in classRe.findAll(text)) out.getOrPut("$pkg.${m.groupValues[1]}") { mutableListOf() } += e.name
+            }
+            out
+        }
+    } catch (_: Exception) {
+        emptyMap()
+    }
+
     private val jars = HashMap<String, String>()
     private val indexes = HashMap<String, Map<String, List<String>>>()
     private val entryNames = HashMap<String, Set<String>>()

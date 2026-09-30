@@ -15,6 +15,7 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 	}
 	var hover *protocol.Hover
 	var local *kotlin.HoverResult
+	guess := false
 	s.session.Read(func(sn *cache.Snapshot) {
 		var f *kotlin.ParsedFile
 		var release func()
@@ -29,6 +30,7 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 			if h.Local {
 				local = h
 			}
+			guess = h.Guess
 			hover = &protocol.Hover{
 				Contents: protocol.MarkupContent{Kind: protocol.Markdown, Value: h.Markdown},
 				Range:    &h.Range,
@@ -40,6 +42,11 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 	case hover == nil:
 		// A library declaration, most likely: ask the compiler.
 		hover = s.analyzerHover(ctx, path, params.Position)
+	case guess:
+		// Found by name alone: the compiler knows which it is.
+		if h := s.analyzerHover(ctx, path, params.Position); h != nil {
+			hover = h
+		}
 	case local != nil:
 		// The compiler knows a local's type; the syntax only guesses it.
 		if h := s.analyzerLocalHover(ctx, path, params.Position, local.Where); h != nil {

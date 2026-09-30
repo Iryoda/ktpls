@@ -19,6 +19,9 @@ type HoverResult struct {
 	// what it is ("lambda parameter", ...).
 	Local bool
 	Where string
+	// Guess is set when the declaration was found by name alone (the
+	// receiver's type is unknown): maybe not the one referred to.
+	Guess bool
 }
 
 // Hover describes the declaration of the identifier at offset in f: its
@@ -46,7 +49,7 @@ func Hover(f *ParsedFile, ix *Index, offset int) *HoverResult {
 		md += fmt.Sprintf("\n\n_+%d other %s_", n, textutil.Plural(n, "candidate", "candidates"))
 	}
 	rng, _ := f.Mapper.OffsetRange(int(id.StartByte()), int(id.EndByte()))
-	return &HoverResult{Markdown: md, Range: rng, Local: targets[0].local != nil, Where: where}
+	return &HoverResult{Markdown: md, Range: rng, Local: targets[0].local != nil, Where: where, Guess: targets[0].guess}
 }
 
 // describe renders a target as markdown, and says what it is.

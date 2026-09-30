@@ -31,6 +31,8 @@ class Analyzer {
         val ms = measureTimeMillis { fresh = Workspace(model!!, jdkHome) }
         ws = fresh
         byPath = fresh.files.associateBy { it.virtualFile.path }
+        Sources.stdlib = (model!!.paths("KTPLS-CLASSPATH", "main") + model!!.paths("KTPLS-CLASSPATH", "test"))
+            .map { it.toString() }.filter { Regex("""kotlin-stdlib-\d""").containsMatchIn(it.substringAfterLast('/')) }.distinct()
         return buildJsonObject {
             put("files", fresh.files.size)
             put("millis", ms)

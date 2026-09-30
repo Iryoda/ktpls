@@ -330,3 +330,92 @@ func TestReparseMatchesFullParse(t *testing.T) {
 		tree, cur = incr, edited
 	}
 }
+
+// Nested classes are visible by simple name only in their class or where
+// imported: elsewhere Result and Unit are kotlin's, however many nested
+// classes share their names.
+func TestDefinitionNestedClassScope(t *testing.T) {
+	_, ix := parseOne(t, "/w/a/Report.kt", `package a
+
+class Report(val result: Result, val unit: Unit?) {
+    enum class Result { OK, FAILED }
+    data class Unit(val name: String)
+
+    fun ok(): Result = Result.OK
+}
+`)
+	use := func(path, src string) *ParsedFile {
+		f, _ := parseOne(t, path, src)
+		ix.Update(f.Summary)
+		return f
+	}
+	where := func(f *ParsedFile, needle string) []string {
+		t.Helper()
+		i := strings.Index(string(f.Content), needle)
+		if i < 0 {
+			t.Fatalf("%q not found", needle)
+		}
+		var out []string
+		for _, loc := range Definition(f, ix, i) {
+			p, _ := loc.URI.Path()
+			out = append(out, fmt.Sprintf("%s:%d", p, loc.Range.Start.Line+1))
+		}
+		return out
+	}
+
+	other := use("/w/b/Service.kt", `package b
+
+interface Service {
+    fun run(): Result<Unit>
+    fun all(): Result<List<Unit>> = runCatching { listOf(Unit) }
+}
+`)
+	for _, needle := range []string{"Result<Unit>", "Unit>", "Result<List", "Unit>>", "Unit) }"} {
+		if got := where(other, needle); len(got) != 0 {
+			t.Errorf("%q in another package resolved to %v, want kotlin's (none)", needle, got)
+		}
+	}
+
+	imported := use("/w/c/Uses.kt", `package c
+
+import a.Report.Result
+import a.Report.*
+
+fun check(r: Result, u: Unit) = r == Result.OK
+fun qualified(r: a.Report.Result) = r
+`)
+	for needle, want := range map[string]string{
+		"Result, u":     "/w/a/Report.kt:4", // explicit import
+		"Unit) =":       "/w/a/Report.kt:5", // wildcard import
+		"Result.OK":     "/w/a/Report.kt:4",
+		"Result) = r\n": "/w/a/Report.kt:4", // qualified
+	} {
+		if got := where(imported, needle); !slices.Equal(got, []string{want}) {
+			t.Errorf("%q: got %v, want %s", needle, got, want)
+		}
+	}
+}
+
+// A member of a receiver of unknown type is found by name alone: every
+// declaration with that name, marked as a guess for the compiler to settle.
+func TestDefinitionGuess(t *testing.T) {
+	f, ix := parseOne(t, "/w/G.kt", `package p
+
+class Order(val itemId: String)
+class Sale(val itemId: String)
+
+fun known(o: Order) = o.itemId
+fun unknown() = lookup().flatMap { order -> order.itemId }
+`)
+	guess := func(needle string) (int, bool) {
+		t.Helper()
+		locs, g := DefinitionGuess(f, ix, strings.Index(string(f.Content), needle))
+		return len(locs), g
+	}
+	if n, g := guess("itemId\nfun unknown"); n != 1 || g {
+		t.Errorf("known receiver: %d locations, guess %v; want 1, false", n, g)
+	}
+	if n, g := guess("itemId }"); n != 2 || !g {
+		t.Errorf("unknown receiver: %d locations, guess %v; want 2, true", n, g)
+	}
+}

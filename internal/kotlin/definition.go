@@ -16,17 +16,25 @@ const maxFallback = 30
 // the current package and wildcard imports, and finally any workspace
 // symbol with the same name.
 func Definition(f *ParsedFile, ix *Index, offset int) []protocol.Location {
+	locs, _ := DefinitionGuess(f, ix, offset)
+	return locs
+}
+
+// DefinitionGuess is Definition, also reporting whether the locations are
+// guesses: declarations with the identifier's name, found without knowing
+// its receiver's type.
+func DefinitionGuess(f *ParsedFile, ix *Index, offset int) (locs []protocol.Location, guess bool) {
 	id := IdentifierAt(f.Tree, offset)
 	if id == nil {
-		return nil
+		return nil, false
 	}
 	r := &resolver{f: f, ix: ix, src: f.Content}
 	targets := r.resolve(id)
-	var locs []protocol.Location
 	for _, t := range targets {
 		locs = append(locs, t.location(f))
+		guess = guess || t.guess
 	}
-	return locs
+	return locs, guess
 }
 
 // IdentifierAt returns the identifier node at offset, also accepting a
@@ -63,6 +71,9 @@ type target struct {
 	sym   *Symbol
 	local *local
 	param *protocol.Location
+	// guess marks a candidate found by name alone (the receiver's type is
+	// unknown): one of possibly many unrelated declarations.
+	guess bool
 	// For param targets: the parameter and the function declaring it.
 	paramInfo  Param
 	paramOwner *Symbol
@@ -105,6 +116,15 @@ func symbolTargets(syms []*Symbol) []target {
 	out := make([]target, len(syms))
 	for i, s := range syms {
 		out[i] = target{sym: s}
+	}
+	return out
+}
+
+// guessTargets are candidates found by name alone.
+func guessTargets(syms []*Symbol) []target {
+	out := symbolTargets(syms)
+	for i := range out {
+		out[i].guess = true
 	}
 	return out
 }
@@ -218,7 +238,7 @@ func (r *resolver) resolveNameUncached(use *ts.Node, name string, typesOnly bool
 		// workspace declaration can be the target.
 		return nil
 	}
-	return symbolTargets(r.fallback(name, typesOnly))
+	return guessTargets(r.fallback(name, typesOnly))
 }
 
 // returnsReceiver are the standard library functions that return their
@@ -334,11 +354,15 @@ func (r *resolver) resolveInFile(sum *FileSummary, name string, typesOnly bool) 
 // an implicit receiver whose type we don't know (a lambda with receiver,
 // or an inherited library supertype). A top-level declaration can't be
 // the target: it would have to be imported or in the same package, and
-// both were checked.
+// both were checked. Nor can a nested class: those are never reached
+// through a receiver, only in scope or imported.
 func (r *resolver) fallback(name string, typesOnly bool) []*Symbol {
+	if typesOnly {
+		return nil
+	}
 	var syms []*Symbol
-	for _, s := range filterKinds(r.ix.ByName(name), typesOnly) {
-		if s.Container != "" || s.Receiver != "" {
+	for _, s := range r.ix.ByName(name) {
+		if (s.Container != "" || s.Receiver != "") && !s.Kind.IsType() {
 			syms = append(syms, s)
 		}
 	}
@@ -491,13 +515,15 @@ func (r *resolver) resolveTypeUse(id *ts.Node, name string) []target {
 	if syms := r.resolveTypeName(name, r.f.Summary, r.containerAt(id)); len(syms) > 0 {
 		return symbolTargets(syms)
 	}
-	// Inherited nested types, then anything with that name.
+	// Inherited nested types. A type out of scope (not imported, not in
+	// the package or an enclosing class) is a library type, like
+	// kotlin.Result, however many nested classes elsewhere share its name.
 	for _, c := range r.enclosingContainers(id) {
 		if ms := r.membersNamed(c, name, true, map[string]bool{}); len(ms) > 0 {
 			return symbolTargets(ms)
 		}
 	}
-	return symbolTargets(r.fallback(name, true))
+	return nil
 }
 
 // containerAt returns the FQName of the innermost container enclosing n.
@@ -557,17 +583,18 @@ func (r *resolver) resolveMember(suffix *ts.Node, name string) []target {
 		}
 	}
 	// Unknown receiver: any member or extension with that name. A name
-	// that only exists as a top-level declaration can't be the target.
+	// that only exists as a top-level declaration can't be the target,
+	// nor a nested class (a value's receiver never reaches one).
 	var cands []*Symbol
 	for _, s := range r.ix.ByName(name) {
-		if s.Container != "" || s.Receiver != "" {
+		if (s.Container != "" || s.Receiver != "") && !s.Kind.IsType() {
 			cands = append(cands, s)
 		}
 	}
 	if len(cands) > maxFallback {
 		cands = cands[:maxFallback]
 	}
-	return symbolTargets(cands)
+	return guessTargets(cands)
 }
 
 // extensionsOn returns the extension functions and properties named name
