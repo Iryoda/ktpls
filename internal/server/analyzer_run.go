@@ -3,9 +3,11 @@ package server
 import (
 	"fmt"
 	"os"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/Iryoda/ktpls/internal/analyzer"
+	"github.com/Iryoda/ktpls/internal/cache"
 	"github.com/Iryoda/ktpls/internal/protocol"
 )
 
@@ -26,7 +28,7 @@ func (s *Server) startAnalyzer() {
 	s.az.mu.Unlock()
 	go s.watchAnalyzer(c)
 	s.progressEnd(progressAnalyzer, fmt.Sprintf("%d files", n))
-	s.diagnoseWithAnalyzer(nil)
+	s.diagnoseAllInBatches()
 }
 
 // analyzerClient returns the running analyzer, or nil.
@@ -132,4 +134,26 @@ func utf16ToByte(content []byte, units int) int {
 		off += size
 	}
 	return off
+}
+
+// startupBatch is how many files are diagnosed per request at startup, so
+// that a save's instant check never waits long behind them.
+const startupBatch = 50
+
+// diagnoseAllInBatches diagnoses every Kotlin file of the workspace.
+func (s *Server) diagnoseAllInBatches() {
+	var paths []string
+	s.session.Read(func(sn *cache.Snapshot) {
+		for f := range sn.Files() {
+			if cache.IsKotlinFile(f.Path) {
+				paths = append(paths, f.Path)
+			}
+		}
+	})
+	slices.Sort(paths)
+	for len(paths) > 0 && s.ctx.Err() == nil && s.analyzerClient() != nil {
+		n := min(startupBatch, len(paths))
+		s.diagnoseWithAnalyzer(paths[:n])
+		paths = paths[n:]
+	}
 }
