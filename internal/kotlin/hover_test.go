@@ -198,3 +198,11 @@ data class File(
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+func TestRenderKDocLinks(t *testing.T) {
+	got := RenderKDoc("/**\n * Returns the value if this is [success][Result.isSuccess], see [getOrNull] and [docs](https://kotl.in).\n */")
+	want := "Returns the value if this is success, see `getOrNull` and [docs](https://kotl.in)."
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

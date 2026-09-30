@@ -35,6 +35,7 @@ kotlin {
         optIn.addAll(
             "org.jetbrains.kotlin.analysis.api.KaExperimentalApi",
             "org.jetbrains.kotlin.analysis.api.KaPlatformInterface",
+            "org.jetbrains.kotlin.psi.KtExperimentalApi",
             "org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi",
             "org.jetbrains.kotlin.config.CompilerConfiguration.Internals",
         )

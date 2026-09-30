@@ -43,6 +43,12 @@ class Analyzer {
         }
         "rebuild" -> open()
         "check" -> check(params)
+        "hover" -> {
+            val path = params.string("path")
+            val file = byPath[path] ?: error("not in the project: $path")
+            val copy = ws!!.copyOf(file, params.string("text"))
+            hover(copy, params.string("offset").toInt())?.let { hoverResult(it) } ?: JsonNull
+        }
         "diagnose" -> {
             val paths = params["paths"]?.let { if (it is JsonNull) null else it.jsonArray.map { p -> p.jsonPrimitive.content } }
             val files = if (paths.isNullOrEmpty()) byPath.values.toList() else paths.mapNotNull { byPath[it] }
@@ -65,6 +71,24 @@ class Analyzer {
         lateinit var ds: List<Diag>
         val ms = measureTimeMillis { ds = ws!!.check(file, params.string("text")) }
         return fileResult(path, ds, ms)
+    }
+
+    private fun hoverResult(h: HoverInfo) = buildJsonObject {
+        put("start", h.start)
+        put("end", h.end)
+        put("signature", h.signature)
+        h.call?.let { put("call", it) }
+        h.container?.let { put("container", it) }
+        h.doc?.let { put("doc", it) }
+        h.docLanguage?.let { put("docLanguage", it) }
+        h.source?.let { src ->
+            put("source", buildJsonObject {
+                put("path", src.path)
+                src.jar?.let { put("jar", it) }
+                src.entry?.let { put("entry", it) }
+                put("offset", src.offset)
+            })
+        }
     }
 
     private fun fileResult(path: String, ds: List<Diag>, millis: Long? = null) = buildJsonObject {
@@ -90,20 +114,24 @@ private fun JsonObject.string(key: String) = this[key]?.jsonPrimitive?.content ?
 
 class Request(val id: Int, val method: String, val params: JsonObject)
 
-// Requests waiting to run, one at a time. Checks (what the user is typing)
-// go first, and a newer check of a file replaces a waiting older one.
+// Requests waiting to run, one at a time. Interactive requests (checks of
+// what the user is typing, hovers) go first, and a newer check of a file
+// replaces a waiting older one.
 class Queue(private val out: java.io.PrintStream) {
     private val lock = Object()
     private val checks = LinkedHashMap<String, Request>()
+    private val interactive = ArrayDeque<Request>()
     private val others = ArrayDeque<Request>()
 
     fun put(r: Request) = synchronized(lock) {
-        if (r.method == "check") {
-            val path = r.params["path"]?.jsonPrimitive?.content ?: ""
-            checks.remove(path)?.let { respond(it.id, error = "superseded") }
-            checks[path] = r
-        } else {
-            others.addLast(r)
+        when (r.method) {
+            "check" -> {
+                val path = r.params["path"]?.jsonPrimitive?.content ?: ""
+                checks.remove(path)?.let { respond(it.id, error = "superseded") }
+                checks[path] = r
+            }
+            "hover" -> interactive.addLast(r)
+            else -> others.addLast(r)
         }
         lock.notifyAll()
     }
@@ -119,13 +147,15 @@ class Queue(private val out: java.io.PrintStream) {
         }
     }
 
+    // nextCheck returns the next interactive request.
     private fun nextCheck(): Request? = synchronized(lock) {
+        interactive.removeFirstOrNull()?.let { return it }
         val first = checks.keys.firstOrNull() ?: return null
         checks.remove(first)
     }
 
-    // runChecks runs the checks waiting now (between the files of a long
-    // request).
+    // runChecks runs the interactive requests waiting now (between the
+    // files of a long request).
     fun runChecks(analyzer: Analyzer) {
         while (true) {
             val r = nextCheck() ?: return

@@ -5,11 +5,11 @@ import (
 	"os"
 	"slices"
 	"time"
-	"unicode/utf8"
 
 	"github.com/Iryoda/ktpls/internal/analyzer"
 	"github.com/Iryoda/ktpls/internal/cache"
 	"github.com/Iryoda/ktpls/internal/protocol"
+	"github.com/Iryoda/ktpls/internal/util/textutil"
 )
 
 // startAnalyzer starts the analyzer and reports the diagnostics of every
@@ -125,7 +125,7 @@ func (s *Server) toProtocol(content []byte, ds []analyzer.Diagnostic) []protocol
 	m := protocol.NewMapper(content, s.session.Encoding())
 	var out []protocol.Diagnostic
 	for _, d := range ds {
-		start, end := utf16ToByte(content, d.Start), utf16ToByte(content, d.End)
+		start, end := textutil.UTF16ToByte(content, d.Start), textutil.UTF16ToByte(content, d.End)
 		if end == start+1 && content[start] == '=' {
 			// Some initializer errors point at the '='; show them on the value.
 			start = skipAssignment(content, start)
@@ -145,21 +145,6 @@ func (s *Server) toProtocol(content []byte, ds []analyzer.Diagnostic) []protocol
 		out = append(out, protocol.Diagnostic{Range: rng, Severity: sev, Source: "kotlin", Message: d.Message})
 	}
 	return out
-}
-
-// utf16ToByte converts an offset in UTF-16 code units into a byte offset.
-func utf16ToByte(content []byte, units int) int {
-	off := 0
-	for off < len(content) && units > 0 {
-		r, size := utf8.DecodeRune(content[off:])
-		if r >= 0x10000 {
-			units -= 2
-		} else {
-			units--
-		}
-		off += size
-	}
-	return off
 }
 
 // startupBatch is how many files are diagnosed per request at startup, so

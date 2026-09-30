@@ -28,5 +28,9 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 			}
 		}
 	})
+	if hover == nil && err == nil {
+		// A library declaration, most likely: ask the compiler.
+		hover = s.analyzerHover(ctx, path, params.Position)
+	}
 	return hover, err
 }

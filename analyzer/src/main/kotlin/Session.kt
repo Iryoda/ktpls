@@ -129,10 +129,13 @@ class Workspace(model: Model, jdkHome: String) {
     // Diagnostics for new text of a file, at once: the text is analyzed as
     // an in-memory copy in the file's module, against the rest of the
     // project as of this session.
-    fun check(file: KtFile, text: String): List<Diag> {
+    fun check(file: KtFile, text: String): List<Diag> = diagnose(copyOf(file, text))
+
+    // copyOf returns new text of a file as an in-memory copy in its module.
+    fun copyOf(file: KtFile, text: String): KtFile {
         val copy = KtPsiFactory(session.project).createFile(file.name, text)
         copy.contextModule = moduleOf.getValue(file)
-        return diagnose(copy)
+        return copy
     }
 
     fun close() = Disposer.dispose(disposable)

@@ -152,16 +152,24 @@ func RenderKDoc(comment string) string {
 	return b.String()
 }
 
-// links renders KDoc [name] links as code spans, leaving markdown links
-// [text](url) alone.
+// links renders KDoc [name] links as code spans, and [text][name] links
+// as their text, leaving markdown links [text](url) alone.
 func links(s string) string {
 	var b strings.Builder
 	last := 0
-	for _, m := range kdocLinkRE.FindAllStringSubmatchIndex(s, -1) {
-		if m[1] < len(s) && s[m[1]] == '(' {
+	ms := kdocLinkRE.FindAllStringSubmatchIndex(s, -1)
+	for i := 0; i < len(ms); i++ {
+		m := ms[i]
+		if m[0] < last || m[1] < len(s) && s[m[1]] == '(' {
 			continue
 		}
 		b.WriteString(s[last:m[0]])
+		if i+1 < len(ms) && ms[i+1][0] == m[1] { // [text][name]
+			b.WriteString(s[m[2]:m[3]])
+			last = ms[i+1][1]
+			i++
+			continue
+		}
 		b.WriteString("`" + s[m[2]:m[3]] + "`")
 		last = m[1]
 	}

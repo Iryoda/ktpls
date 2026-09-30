@@ -130,3 +130,19 @@ func UTF16Len[T ~string | ~[]byte](s T) int {
 	}
 	return n
 }
+
+// UTF16ToByte converts an offset into src in UTF-16 code units (as Java
+// and the JVM count) into a byte offset.
+func UTF16ToByte(src []byte, units int) int {
+	off := 0
+	for off < len(src) && units > 0 {
+		r, size := utf8.DecodeRune(src[off:])
+		if r >= 0x10000 {
+			units -= 2
+		} else {
+			units--
+		}
+		off += size
+	}
+	return off
+}

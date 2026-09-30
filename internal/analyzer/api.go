@@ -1,6 +1,9 @@
 package analyzer
 
-import "context"
+import (
+	"context"
+	"strconv"
+)
 
 // A Diagnostic is a compiler diagnostic in a file. Start and End are
 // offsets into the analyzed text, in UTF-16 code units (Java's string
@@ -57,4 +60,34 @@ func (c *Client) Diagnose(ctx context.Context, paths []string) ([]FileDiagnostic
 	}
 	err := c.Call(ctx, "diagnose", map[string][]string{"paths": paths}, &r)
 	return r.Files, err
+}
+
+// HoverInfo describes the reference under the cursor as the compiler
+// resolves it. Offsets are in UTF-16 code units.
+type HoverInfo struct {
+	Start       int     `json:"start"`
+	End         int     `json:"end"`
+	Signature   string  `json:"signature"`   // the declaration
+	Call        string  `json:"call"`        // with this call's types, if they differ
+	Container   string  `json:"container"`   // class or package
+	Doc         string  `json:"doc"`         // the raw doc comment
+	DocLanguage string  `json:"docLanguage"` // "kotlin" or "java"
+	Source      *Source `json:"source"`
+}
+
+// A Source is where a declaration is: a project file (Jar empty), or an
+// entry of a library's sources jar. Offset is in UTF-16 code units.
+type Source struct {
+	Path   string `json:"path"`
+	Jar    string `json:"jar"`
+	Entry  string `json:"entry"`
+	Offset int    `json:"offset"`
+}
+
+// Hover resolves the reference at offset (UTF-16) in text, the content
+// of the file at path; nil if there is none.
+func (c *Client) Hover(ctx context.Context, path, text string, offset int) (*HoverInfo, error) {
+	var r *HoverInfo
+	err := c.Call(ctx, "hover", map[string]string{"path": path, "text": text, "offset": strconv.Itoa(offset)}, &r)
+	return r, err
 }

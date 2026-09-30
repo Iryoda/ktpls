@@ -39,6 +39,11 @@ change are re-checked in the background. The analyzer jar is built by the
 Mason install (the first build downloads its dependencies and can take a
 while). It uses up to 2 GB of memory and stops with ktpls.
 
+The analyzer also answers hovers ktpls can't resolve from the source
+alone: library declarations such as `save`, `map` or `getOrThrow` show
+their signature, the types of the call under the cursor, and their
+documentation, read from the library's `-sources.jar` in the Gradle cache.
+
 Starting is quick after the first run: the Gradle project model is cached
 until a build file changes, the JVM keeps a class data sharing archive,
 and the last run's diagnostics of unchanged files show at once while the
