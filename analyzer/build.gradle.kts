@@ -40,11 +40,12 @@ kotlin {
         )
     }
 }
-application { mainClass.set("ktpls.analyzer.MainKt") }
+application { mainClass.set("MainKt") }
 
 
 tasks.shadowJar {
     mergeServiceFiles()
     isZip64 = true
     archiveFileName.set("analyzer.jar")
+    manifest { attributes["Main-Class"] = "MainKt" }
 }

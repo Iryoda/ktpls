@@ -100,12 +100,15 @@ fun buildSession(model: Model, jdkHome: String, disposable: com.intellij.openapi
     }
 }
 
-data class Diag(val severity: KaSeverity, val factory: String, val message: String)
+data class Diag(val severity: KaSeverity, val factory: String, val message: String, val start: Int, val end: Int)
 
 @OptIn(KaExperimentalApi::class)
 fun diagnose(file: KtFile): List<Diag> = analyze(file) {
     file.collectDiagnostics(KaDiagnosticCheckerFilter.ONLY_COMMON_CHECKERS)
-        .map { Diag(it.severity, it.factoryName, it.defaultMessage) }
+        .map {
+            val r = it.textRanges.firstOrNull() ?: it.psi.textRange
+            Diag(it.severity, it.factoryName, it.defaultMessage, r.startOffset, r.endOffset)
+        }
 }
 
 fun usedMb(): Long {
@@ -135,81 +138,3 @@ class Workspace(model: Model, jdkHome: String) {
     fun close() = Disposer.dispose(disposable)
 }
 
-fun errorsOf(ds: List<Diag>) = ds.filter { it.severity == KaSeverity.ERROR }
-
-// args: <model.txt> <jdkHome> <file A suffix> <file B suffix>
-fun main(args: Array<String>) {
-    try {
-        run(args)
-    } catch (t: Throwable) {
-        t.printStackTrace()
-        exitProcess(1)
-    }
-    exitProcess(0)
-}
-
-fun run(args: Array<String>) {
-    val model = Model(args[0])
-    lateinit var ws: Workspace
-    val tSession = measureTimeMillis { ws = Workspace(model, args[1]) }
-    println("session built in ${tSession}ms: ${ws.files.size} Kotlin files, heap ${usedMb()}MB")
-
-    // Every file, as on startup: code that compiles should have no errors.
-    val errorsByFactory = mutableMapOf<String, Int>()
-    var warnings = 0
-    val tAll = measureTimeMillis {
-        for (f in ws.files) for (d in diagnose(f)) {
-            if (d.severity == KaSeverity.ERROR) errorsByFactory.merge(d.factory, 1, Int::plus)
-            else if (d.severity == KaSeverity.WARNING) warnings++
-        }
-    }
-    println("all files in ${tAll}ms: ${errorsByFactory.values.sum()} errors, $warnings warnings; heap ${usedMb()}MB")
-    errorsByFactory.forEach { (k, v) -> println("  error $k: $v") }
-
-    val a = ws.file(args[2])
-    val b = ws.file(args[3])
-    val aPath = File(a.virtualFile.path)
-    val bPath = File(b.virtualFile.path)
-    val aText = aPath.readText()
-    val bText = bPath.readText()
-    try {
-        saveTests(ws, a, b, aPath, bPath, aText, bText, args)
-    } finally {
-        aPath.writeText(aText) // restore the copies, whatever happened
-        bPath.writeText(bText)
-    }
-}
-
-fun saveTests(ws: Workspace, a: KtFile, b: KtFile, aPath: File, bPath: File, aText: String, bText: String, args: Array<String>) {
-
-    // Instant check of a saved file's new text in the current session.
-    fun check(file: File, text: String, psi: KtFile, label: String) {
-        file.writeText(text)
-        lateinit var ds: List<Diag>
-        val t = measureTimeMillis { ds = ws.check(psi, text) }
-        println("instant: %-40s %5dms  errors=%s".format(label, t, errorsOf(ds).map { it.factory }))
-    }
-
-    // 1. An error introduced and fixed in one file.
-    check(aPath, aText + "\nval ktplsProbe: Int = \"not an int\"\n", a, "A with a type error")
-    check(aPath, aText, a, "A fixed")
-
-    // 2. Across files: B calls a function A doesn't declare yet...
-    check(bPath, bText + "\nfun ktplsUse() = ktplsNewFunction()\n", b, "B calls a missing function")
-    // ...then A is saved declaring it. The instant check sees A alone; B
-    // catches up when the session is rebuilt in the background.
-    check(aPath, aText + "\nfun ktplsNewFunction() = 1\n", a, "A declares it")
-
-    lateinit var fresh: Workspace
-    val tRebuild = measureTimeMillis {
-        ws.close()
-        fresh = Workspace(Model(args[0]), args[1])
-    }
-    lateinit var bErrors: List<Diag>
-    val tB = measureTimeMillis { bErrors = errorsOf(diagnose(fresh.file(args[3]))) }
-    println("rebuild: session %dms, then B analyzed in %dms: errors=%s".format(tRebuild, tB, bErrors.map { it.factory }))
-    lateinit var aErrors: List<Diag>
-    val tA = measureTimeMillis { aErrors = errorsOf(diagnose(fresh.file(args[2]))) }
-    println("         A analyzed in %dms: errors=%s; heap %dMB".format(tA, aErrors.map { it.factory }, usedMb()))
-    fresh.close()
-}
