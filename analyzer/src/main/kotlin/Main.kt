@@ -11,6 +11,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.jetbrains.kotlin.analysis.api.diagnostics.KaSeverity
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import kotlin.system.exitProcess
 import kotlin.system.measureTimeMillis
 
@@ -118,12 +120,13 @@ class Request(val id: Int, val method: String, val params: JsonObject)
 // what the user is typing, hovers) go first, and a newer check of a file
 // replaces a waiting older one.
 class Queue(private val out: java.io.PrintStream) {
-    private val lock = Object()
+    private val lock = ReentrantLock()
+    private val arrived = lock.newCondition()
     private val checks = LinkedHashMap<String, Request>()
     private val interactive = ArrayDeque<Request>()
     private val others = ArrayDeque<Request>()
 
-    fun put(r: Request) = synchronized(lock) {
+    fun put(r: Request) = lock.withLock {
         when (r.method) {
             "check" -> {
                 val path = r.params["path"]?.jsonPrimitive?.content ?: ""
@@ -133,22 +136,22 @@ class Queue(private val out: java.io.PrintStream) {
             "hover" -> interactive.addLast(r)
             else -> others.addLast(r)
         }
-        lock.notifyAll()
+        arrived.signalAll()
     }
 
     // take waits for the next request.
-    fun take(): Request {
-        synchronized(lock) {
-            while (true) {
-                nextCheck()?.let { return it }
-                others.removeFirstOrNull()?.let { return it }
-                lock.wait()
-            }
+    fun take(): Request = lock.withLock {
+        while (true) {
+            nextCheck()?.let { return it }
+            others.removeFirstOrNull()?.let { return it }
+            arrived.await()
         }
+        @Suppress("UNREACHABLE_CODE")
+        error("unreachable")
     }
 
     // nextCheck returns the next interactive request.
-    private fun nextCheck(): Request? = synchronized(lock) {
+    private fun nextCheck(): Request? = lock.withLock {
         interactive.removeFirstOrNull()?.let { return it }
         val first = checks.keys.firstOrNull() ?: return null
         checks.remove(first)

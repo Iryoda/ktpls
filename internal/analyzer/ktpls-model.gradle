@@ -1,5 +1,6 @@
 // ktpls project model: prints, for each project's source sets, the source
-// folders, the compile classpath and the Kotlin compiler plugin options.
+// folders, the compile classpath, the Kotlin compiler arguments and the
+// compiler plugin options.
 // Lines are tab-separated: KIND, project path, source set, value.
 allprojects {
     tasks.register('ktplsModel') {
@@ -14,6 +15,21 @@ allprojects {
                 println "KTPLS-CLASSPATH\t${project.path}\t${s.name}\t" + s.compileClasspath.files.join(File.pathSeparator)
                 def taskName = s.getCompileTaskName('kotlin')
                 def t = project.tasks.findByName(taskName)
+                if (t != null && t.hasProperty('compilerOptions')) {
+                    // The compilation's arguments: opt-ins, language
+                    // version and -X flags change what compiles.
+                    def args = []
+                    try {
+                        def o = t.compilerOptions
+                        o.optIn.get().each { args << "-opt-in=${it}" }
+                        if (o.languageVersion.isPresent()) args += ['-language-version', o.languageVersion.get().version]
+                        if (o.apiVersion.isPresent()) args += ['-api-version', o.apiVersion.get().version]
+                        if (o.progressiveMode.getOrElse(false)) args << '-progressive'
+                        args.addAll(o.freeCompilerArgs.get())
+                    } catch (Exception ignored) {
+                    }
+                    args.each { a -> println "KTPLS-ARG\t${project.path}\t${s.name}\t${a}" }
+                }
                 if (t != null && t.hasProperty('pluginOptions')) {
                     t.pluginOptions.get().each { cfg ->
                         cfg.allOptions().each { id, opts ->

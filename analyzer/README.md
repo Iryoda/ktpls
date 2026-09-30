@@ -1,22 +1,28 @@
-# ktpls analyzer (prototype)
+# ktpls analyzer
 
-A sibling JVM process for ktpls that runs the Kotlin compiler's front end
-(the Kotlin Analysis API, K2) over the project, for compiler diagnostics
-without a Gradle build. **Prototype**: `Spike.kt` builds a standalone
-analysis session from a project model and reports diagnostics for every
-file, with timings.
+A sibling JVM process for ktpls, like jdtls is for Java editors: it runs
+the Kotlin compiler's front end (the Kotlin Analysis API, K2) over the
+project, for IntelliJ-like diagnostics as you type, and for hovers and
+definitions of library declarations. ktpls starts it, and stops it on
+exit.
 
-- `gradle/ktpls-model.gradle`: a Gradle init script printing each
-  project's source folders and compile classpath (the project model).
-- Kotlin 2.4.20 Analysis API (`*-for-ide` artifacts from JetBrains'
-  intellij-dependencies repository) on IntelliJ platform 251.27812.49,
-  bundled into one jar (`gradle shadowJar` → `build/libs/analyzer.jar`):
-  the Analysis API's descriptors must be loadable together, and the
-  platform jars must come before the older copies inside kotlin-compiler.
+- `Session.kt` builds a standalone analysis session from the project
+  model (source folders, classpaths and compiler plugin options, read
+  from Gradle by `internal/analyzer/ktpls-model.gradle`), and checks a
+  buffer's text as an in-memory copy of its file.
+- `Hover.kt` resolves a reference: its declaration, the call's types, and
+  the declaration's docs from the library's sources jar.
+- `Main.kt` is the protocol: one JSON request or response per line on
+  stdin and stdout (init, rebuild, check, diagnose, hover, shutdown);
+  interactive requests run first.
 
-Run the prototype:
+It uses Kotlin 2.4.20's Analysis API (`*-for-ide` artifacts from
+JetBrains' intellij-dependencies repository) on IntelliJ platform
+251.27812.49, bundled into one jar; the platform jars come before the
+older copies inside kotlin-compiler.
+
+Build it (the Mason install does this):
 
 ```sh
-./gradlew -I internal/analyzer/ktpls-model.gradle ktplsModel -q --no-configuration-cache > model.txt   # in the project
-java -Xmx4g -cp build/libs/analyzer.jar SpikeKt model.txt "$JAVA_HOME"
+./gradlew shadowJar   # → build/libs/analyzer.jar
 ```

@@ -5,7 +5,6 @@ import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.components.KaDiagnosticCheckerFilter
 import org.jetbrains.kotlin.analysis.api.diagnostics.KaSeverity
-import org.jetbrains.kotlin.analysis.api.projectStructure.KaSourceModule
 import org.jetbrains.kotlin.analysis.api.standalone.StandaloneAnalysisAPISession
 import org.jetbrains.kotlin.analysis.api.standalone.buildStandaloneAnalysisAPISession
 import org.jetbrains.kotlin.analysis.project.structure.builder.buildKtLibraryModule
@@ -13,7 +12,12 @@ import org.jetbrains.kotlin.analysis.project.structure.builder.buildKtSdkModule
 import org.jetbrains.kotlin.analysis.project.structure.builder.buildKtSourceModule
 import org.jetbrains.kotlin.cli.extensionsStorage
 import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
+import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArgumentsConfigurator
+import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
+import org.jetbrains.kotlin.cli.common.arguments.parseCommandLineArguments
+import org.jetbrains.kotlin.cli.common.arguments.toLanguageVersionSettings
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
@@ -21,20 +25,29 @@ import org.jetbrains.kotlin.analysis.api.projectStructure.contextModule
 import java.io.File
 import java.nio.file.Path
 import kotlin.io.path.Path
-import kotlin.system.exitProcess
-import kotlin.system.measureTimeMillis
 
 class Model(path: String) {
     private val rows = File(path).readLines().map { it.split("\t") }
     fun paths(kind: String, set: String): List<Path> =
         rows.firstOrNull { it[0] == kind && it[2] == set }?.getOrNull(3).orEmpty()
             .split(":").filter { it.isNotBlank() }.distinct().map { Path(it) }
+    // The arguments of a source set's Kotlin compilation, in order.
+    fun compilerArgs(set: String): List<String> =
+        rows.filter { it[0] == "KTPLS-ARG" && it[2] == set }.map { it[3] }.distinct()
     // "pluginId:key=value" options of a source set's Kotlin compilation.
     fun pluginOptions(set: String): List<Pair<String, String>> =
         rows.filter { it[0] == "KTPLS-PLUGIN" && it[2] == set }.map { r ->
             val (id, kv) = r[3].split(":", limit = 2)
             id to kv
         }
+}
+
+// The language settings of a compilation's arguments (opt-ins, language
+// version, -X features), as the compiler reads them; null for none.
+fun languageSettings(args: List<String>): LanguageVersionSettings? {
+    if (args.isEmpty()) return null
+    val parsed = parseCommandLineArguments<K2JVMCompilerArguments>(args)
+    return parsed.toLanguageVersionSettings(CommonCompilerArgumentsConfigurator.Reporter.DoNothing)
 }
 
 // The compiler plugins the analyzer knows, configured from the model.
@@ -83,6 +96,7 @@ fun buildSession(model: Model, jdkHome: String, disposable: com.intellij.openapi
                 addSourceRoots(mainSources)
                 platform = jvm
                 moduleName = "main"
+                languageSettings(model.compilerArgs("main"))?.let { languageVersionSettings = it }
                 addRegularDependency(mainLibs)
                 addRegularDependency(jdk)
             })
@@ -90,6 +104,7 @@ fun buildSession(model: Model, jdkHome: String, disposable: com.intellij.openapi
                 addSourceRoots(testSources)
                 platform = jvm
                 moduleName = "test"
+                languageSettings(model.compilerArgs("test"))?.let { languageVersionSettings = it }
                 addRegularDependency(main)
                 addFriendDependency(main)
                 addRegularDependency(mainLibs)
@@ -111,20 +126,12 @@ fun diagnose(file: KtFile): List<Diag> = analyze(file) {
         }
 }
 
-fun usedMb(): Long {
-    val rt = Runtime.getRuntime()
-    System.gc()
-    return (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
-}
-
 // A session over the project as it was on disk when it was built.
 class Workspace(model: Model, jdkHome: String) {
     private val disposable = Disposer.newDisposable("ktpls-session")
     val session = buildSession(model, jdkHome, disposable)
     private val moduleOf = session.modulesWithFiles.flatMap { (m, fs) -> fs.map { it to m } }.toMap()
     val files: List<KtFile> = moduleOf.keys.filterIsInstance<KtFile>()
-
-    fun file(pathSuffix: String): KtFile = files.first { it.virtualFile.path.endsWith(pathSuffix) }
 
     // Diagnostics for new text of a file, at once: the text is analyzed as
     // an in-memory copy in the file's module, against the rest of the

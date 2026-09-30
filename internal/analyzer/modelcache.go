@@ -33,6 +33,7 @@ var skipDirs = map[string]bool{".git": true, ".gradle": true, ".idea": true, "bu
 // (paths, sizes and times) and the environment Gradle runs with.
 func Fingerprint(root string, env []string) (string, error) {
 	h := sha256.New()
+	h.Write(modelScript) // a new ktpls may read more of the model
 	for _, e := range slices.Sorted(slices.Values(env)) {
 		fmt.Fprintln(h, "env", e)
 	}

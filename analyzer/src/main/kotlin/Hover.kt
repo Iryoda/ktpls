@@ -2,7 +2,6 @@ import com.intellij.lang.java.JavaLanguage
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiField
 import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiJavaDocumentedElement
 import com.intellij.psi.PsiJavaFile
@@ -145,7 +144,6 @@ private fun KaSession.renderCall(name: String, sig: org.jetbrains.kotlin.analysi
             "${it.name.asString()}: ${render(it.returnType)}"
         } + ": " + render(sig.returnType)
         is KaVariableSignature<*> -> "val " + receiver + name + ": " + render(sig.returnType)
-        else -> receiver + name
     }
 }
 
@@ -291,7 +289,7 @@ private fun javaDeclaration(project: Project, name: String, text: String, owner:
     val cap = member.replaceFirstChar { it.uppercase() }
     cls.findMethodsByName("get$cap", false).firstOrNull()?.let { return it }
     cls.findMethodsByName("is$cap", false).firstOrNull()?.let { return it }
-    return cls.findFieldByName(member, false) as PsiField? ?: cls.innerClasses.firstOrNull { it.name == member }
+    return cls.findFieldByName(member, false) ?: cls.innerClasses.firstOrNull { it.name == member }
 }
 
 // Sources finds and reads libraries' sources jars.
