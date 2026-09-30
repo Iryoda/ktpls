@@ -1,0 +1,16 @@
+// Prints each project's source sets: source folders and compile classpath.
+allprojects {
+    tasks.register('ktplsModel') {
+        doLast {
+            def ss = project.extensions.findByName('sourceSets')
+            if (ss == null) return
+            ss.each { s ->
+                def dirs = [] + s.java.srcDirs
+                def k = s.extensions.findByName('kotlin')
+                if (k != null) dirs += k.srcDirs
+                println "KTPLS-SOURCES\t${project.path}\t${s.name}\t" + dirs.findAll { it.exists() }.join(File.pathSeparator)
+                println "KTPLS-CLASSPATH\t${project.path}\t${s.name}\t" + s.compileClasspath.files.join(File.pathSeparator)
+            }
+        }
+    }
+}
