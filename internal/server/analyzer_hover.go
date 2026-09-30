@@ -56,31 +56,51 @@ func (s *Server) analyzerLocalHover(ctx context.Context, path string, pos protoc
 	return &protocol.Hover{Contents: protocol.MarkupContent{Kind: protocol.Markdown, Value: md}, Range: &rng}
 }
 
-// analyzerDefinition finds a library declaration with the analyzer: in
-// its sources jar, extracted for the editor to open.
+// analyzerDefinition finds a declaration with the analyzer: a library's
+// in its sources jar, extracted for the editor to open.
 func (s *Server) analyzerDefinition(ctx context.Context, path string, pos protocol.Position) []protocol.Location {
 	h, text, mapper := s.analyzerResolve(ctx, path, pos)
-	if h == nil || h.Source == nil {
+	if h == nil {
 		return nil
 	}
-	if h.Source.Path == "" && h.Source.Jar == "" { // in this file, as it is in the editor
-		off := textutil.UTF16ToByte(text, h.Source.Offset)
+	return s.sourceLocation(h.Source, path, text, mapper)
+}
+
+// analyzerTypeDefinition finds the class of a value's type with the
+// analyzer.
+func (s *Server) analyzerTypeDefinition(ctx context.Context, path string, pos protocol.Position) []protocol.Location {
+	h, text, mapper := s.analyzerResolve(ctx, path, pos)
+	if h == nil {
+		return nil
+	}
+	return s.sourceLocation(h.TypeSource, path, text, mapper)
+}
+
+// sourceLocation turns an analyzer source into a location: in the file
+// asked about (path, whose text was sent), another project file, or a
+// library's sources extracted to the cache.
+func (s *Server) sourceLocation(src *analyzer.Source, path string, text []byte, mapper *protocol.Mapper) []protocol.Location {
+	if src == nil {
+		return nil
+	}
+	if src.Path == "" && src.Jar == "" { // in this file, as it is in the editor
+		off := textutil.UTF16ToByte(text, src.Offset)
 		rng, err := mapper.OffsetRange(off, off)
 		if err != nil {
 			return nil
 		}
 		return []protocol.Location{{URI: protocol.URIFromPath(path), Range: rng}}
 	}
-	file, err := analyzer.SourceFile(h.Source)
+	file, err := analyzer.SourceFile(src)
 	if err != nil {
-		s.log.Debug("analyzer: definition", "err", err)
+		s.log.Debug("analyzer: source", "err", err)
 		return nil
 	}
 	content, err := os.ReadFile(file)
 	if err != nil {
 		return nil
 	}
-	off := textutil.UTF16ToByte(content, h.Source.Offset)
+	off := textutil.UTF16ToByte(content, src.Offset)
 	rng, err := protocol.NewMapper(content, s.session.Encoding()).OffsetRange(off, off)
 	if err != nil {
 		return nil

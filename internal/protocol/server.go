@@ -22,6 +22,7 @@ type Server interface {
 	Definition(context.Context, *DefinitionParams) ([]Location, error)
 	Implementation(context.Context, *ImplementationParams) ([]Location, error)
 	TypeDefinition(context.Context, *TypeDefinitionParams) ([]Location, error)
+	Declaration(context.Context, *DeclarationParams) ([]Location, error)
 	References(context.Context, *ReferenceParams) ([]Location, error)
 	CodeAction(context.Context, *CodeActionParams) ([]CodeAction, error)
 	ExecuteCommand(context.Context, *ExecuteCommandParams) (any, error)
@@ -108,6 +109,13 @@ func Dispatch(ctx context.Context, s Server, method string, params json.RawMessa
 			return nil, true, err
 		}
 		res, err := s.TypeDefinition(ctx, &p)
+		return res, true, err
+	case "textDocument/declaration":
+		var p DeclarationParams
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.Declaration(ctx, &p)
 		return res, true, err
 	case "textDocument/references":
 		var p ReferenceParams

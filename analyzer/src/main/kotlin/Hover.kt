@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.analysis.api.renderer.types.impl.KaTypeRendererForSo
 import org.jetbrains.kotlin.analysis.api.renderer.types.KaTypeRenderer
 import org.jetbrains.kotlin.analysis.api.renderer.types.renderers.KaFlexibleTypeRenderer
 import org.jetbrains.kotlin.analysis.api.symbols.KaConstructorSymbol
+import org.jetbrains.kotlin.analysis.api.types.KaClassType
 import org.jetbrains.kotlin.analysis.api.types.KaFlexibleType
 import org.jetbrains.kotlin.analysis.utils.printer.PrettyPrinter
 import org.jetbrains.kotlin.analysis.api.resolution.KaCallResolutionSuccess
@@ -57,6 +58,7 @@ data class HoverInfo(
     val doc: String?,             // the raw doc comment
     val docLanguage: String?,     // "kotlin" or "java"
     val source: SourceLocation?,  // where the declaration is
+    val typeSource: SourceLocation? = null, // where its type's class is
 )
 
 // A declaration in a project file (jar null) or in a sources jar entry.
@@ -76,7 +78,9 @@ fun hover(file: KtFile, offset: Int): HoverInfo? = analyze(file) {
     val callText = call?.signature?.let { renderCall(ref.getReferencedName(), it) }
     val declared = (symbol as? KaCallableSymbol)?.let { renderCall(ref.getReferencedName(), it.asSignature()) }
     val source = findSource(file, symbol)
+    val type = call?.signature?.returnType ?: (symbol as? KaCallableSymbol)?.returnType
     HoverInfo(
+        typeSource = if (symbol is KaClassLikeSymbol) source?.location else typeSourceOf(file, type),
         start = ref.textRange.startOffset, end = ref.textRange.endOffset,
         signature = signature,
         call = callText?.takeIf { it != declared },
@@ -93,6 +97,7 @@ private fun KaSession.declarationHover(leaf: PsiElement): HoverInfo? {
     if (decl.nameIdentifier != leaf) return null
     val symbol = decl.symbol
     return HoverInfo(
+        typeSource = typeSourceOf(leaf.containingFile as KtFile, (symbol as? KaCallableSymbol)?.returnType),
         start = leaf.textRange.startOffset, end = leaf.textRange.endOffset,
         signature = renderDeclaration(symbol),
         call = null,
@@ -114,6 +119,14 @@ private object LowerBound : KaFlexibleTypeRenderer {
 }
 
 private val hoverTypeRenderer = KaTypeRendererForSource.WITH_SHORT_NAMES.with { flexibleTypeRenderer = LowerBound }
+
+// typeSourceOf locates the class of a type (List for List<T>), for type
+// definition.
+private fun KaSession.typeSourceOf(file: KtFile, type: KaType?): SourceLocation? {
+    val t = (type as? KaFlexibleType)?.lowerBound ?: type
+    val cls = (t as? KaClassType)?.symbol ?: return null
+    return findSource(file, cls)?.location
+}
 
 // Declarations without their annotations (@InlineOnly, @SinceKotlin...).
 private val declarationRenderer = KaDeclarationRendererForSource.WITH_SHORT_NAMES.with {

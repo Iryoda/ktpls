@@ -23,5 +23,16 @@ func (s *Server) TypeDefinition(ctx context.Context, params *protocol.TypeDefini
 		defer release()
 		locs = kotlin.TypeDefinition(f, sn.Index(), f.Mapper.PositionOffset(params.Position))
 	})
+	if err == nil && len(locs) == 0 {
+		// A type the syntax can't infer (a lambda parameter of a library
+		// call), or a library type: ask the compiler.
+		locs = s.analyzerTypeDefinition(ctx, path, params.Position)
+	}
 	return locs, err
+}
+
+// Declaration is Definition: Kotlin has no separate declarations (an
+// expect declaration aside).
+func (s *Server) Declaration(ctx context.Context, params *protocol.DeclarationParams) ([]protocol.Location, error) {
+	return s.Definition(ctx, &protocol.DefinitionParams{TextDocumentPositionParams: params.TextDocumentPositionParams})
 }

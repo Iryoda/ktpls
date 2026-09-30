@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -20,7 +21,15 @@ func (s *Server) startAnalyzer() {
 	c, n, err := s.launchAnalyzer()
 	if err != nil {
 		s.progressEnd(progressAnalyzer, "unavailable")
-		if s.ctx.Err() == nil {
+		switch {
+		case s.ctx.Err() != nil:
+		case errors.Is(err, errNoBuild):
+			s.log.Info("no Gradle build: no compiler diagnostics", "root", s.root)
+			s.mu.Lock()
+			s.diagMode = modeOff
+			s.mu.Unlock()
+			s.clearAnalyzerDiagnostics()
+		default:
 			s.fallBackToGradle(err)
 		}
 		return

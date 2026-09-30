@@ -65,3 +65,27 @@ func TestRestoredDiagnostics(t *testing.T) {
 		t.Errorf("after the fallback: %+v, want none", d.Diagnostics)
 	}
 }
+
+// Without a Gradle build (a lone file, a library's sources opened from a
+// definition) there are no compiler diagnostics, and nothing to warn about.
+func TestNoBuildNoWarning(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "String.kt"), "package kotlin\n\npublic class String\n")
+	c := newTestClient(t)
+	if resp := c.call("initialize", map[string]any{"processId": nil, "rootUri": protocol.URIFromPath(root), "capabilities": map[string]any{}}); resp.Error != nil {
+		t.Fatal(resp.Error)
+	}
+	c.notify("initialized", map[string]any{})
+	deadline := time.After(1500 * time.Millisecond)
+	for {
+		select {
+		case msg := <-c.notifications:
+			if msg.Method == "window/showMessage" {
+				t.Fatalf("warned: %s", msg.Params)
+			}
+		case <-deadline:
+			return
+		}
+	}
+}

@@ -73,6 +73,7 @@ type HoverInfo struct {
 	Doc         string  `json:"doc"`         // the raw doc comment
 	DocLanguage string  `json:"docLanguage"` // "kotlin" or "java"
 	Source      *Source `json:"source"`
+	TypeSource  *Source `json:"typeSource"` // its type's class (List for List<T>)
 }
 
 // A Source is where a declaration is: a project file (Jar empty; Path

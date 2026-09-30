@@ -44,6 +44,7 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 
 			ImplementationProvider: true,
 			TypeDefinitionProvider: true,
+			DeclarationProvider:    true,
 			ReferencesProvider:     true,
 			CodeActionProvider:     true,
 			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{Commands: []string{kotlin.OpenCommand}},

@@ -85,14 +85,15 @@ class Analyzer {
         h.container?.let { put("container", it) }
         h.doc?.let { put("doc", it) }
         h.docLanguage?.let { put("docLanguage", it) }
-        h.source?.let { src ->
-            put("source", buildJsonObject {
-                put("path", src.path)
-                src.jar?.let { put("jar", it) }
-                src.entry?.let { put("entry", it) }
-                put("offset", src.offset)
-            })
-        }
+        h.source?.let { put("source", sourceJson(it)) }
+        h.typeSource?.let { put("typeSource", sourceJson(it)) }
+    }
+
+    private fun sourceJson(src: SourceLocation) = buildJsonObject {
+        put("path", src.path)
+        src.jar?.let { put("jar", it) }
+        src.entry?.let { put("entry", it) }
+        put("offset", src.offset)
     }
 
     private fun fileResult(path: String, ds: List<Diag>, millis: Long? = null) = buildJsonObject {

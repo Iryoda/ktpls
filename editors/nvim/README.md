@@ -44,7 +44,11 @@ alone: library declarations such as `save`, `map` or `getOrThrow` show
 their signature, the types of the call under the cursor, and their
 documentation, read from the library's `-sources.jar` in the Gradle cache;
 go to definition opens the declaration in those sources (extracted to
-`~/.cache/ktpls/sources`). After startup, ktpls has Gradle download the
+`~/.cache/ktpls/sources`). Go to (and peek) definition, type definition
+and declaration also ask the analyzer when ktpls can't tell a value's
+type from the source, as for a lambda parameter of a library call, so
+lspsaga's `peek_definition` and `peek_type_definition` land on the right
+declaration. After startup, ktpls has Gradle download the
 sources jars still missing, like IntelliJ does (`downloadSources = false`
 turns that off).
 

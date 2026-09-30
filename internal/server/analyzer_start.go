@@ -1,12 +1,18 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Iryoda/ktpls/internal/analyzer"
 	"github.com/Iryoda/ktpls/internal/build"
 )
+
+// errNoBuild: the workspace has no Gradle build (a lone file, a library's
+// sources): there are no compiler diagnostics to give, and nothing to warn
+// about.
+var errNoBuild = errors.New("no Gradle build")
 
 // analyzerSettings resolves the analyzer's options.
 func (s *Server) analyzerSettings() (gradle, env []string, jarOpt, javaHome, mem string) {
@@ -37,7 +43,7 @@ func (s *Server) launchAnalyzer() (*analyzer.Client, int, error) {
 	if len(gradle) == 0 {
 		var ok bool
 		if gradle, ok = build.Detect(s.root); !ok {
-			return nil, 0, fmt.Errorf("no Gradle build in %s", s.root)
+			return nil, 0, errNoBuild
 		}
 	}
 	jar, err := analyzer.FindJar(jarOpt)

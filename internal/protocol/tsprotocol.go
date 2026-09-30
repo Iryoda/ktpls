@@ -134,6 +134,7 @@ type ServerCapabilities struct {
 
 	ImplementationProvider  bool                   `json:"implementationProvider,omitempty"`
 	TypeDefinitionProvider  bool                   `json:"typeDefinitionProvider,omitempty"`
+	DeclarationProvider     bool                   `json:"declarationProvider,omitempty"`
 	ReferencesProvider      bool                   `json:"referencesProvider,omitempty"`
 	CodeActionProvider      bool                   `json:"codeActionProvider,omitempty"`
 	ExecuteCommandProvider  *ExecuteCommandOptions `json:"executeCommandProvider,omitempty"`
@@ -197,6 +198,10 @@ type DefinitionParams struct {
 }
 
 type TypeDefinitionParams struct {
+	TextDocumentPositionParams
+}
+
+type DeclarationParams struct {
 	TextDocumentPositionParams
 }
 
