@@ -78,6 +78,7 @@ func (s *Server) publishDiagnostics(path string) {
 		if !open {
 			return
 		}
+		diags = append(diags, s.messageDiagnostics(sn, path)...)
 		pf := parsedOverlay(sn, path)
 		if pf == nil {
 			return

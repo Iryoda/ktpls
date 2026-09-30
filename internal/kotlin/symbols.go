@@ -116,6 +116,7 @@ type Param struct {
 	Type           string
 	SelectionRange protocol.Range
 	Vararg         bool
+	PropertyKey    bool // annotated @PropertyKey: takes a message key
 }
 
 // An Import is one import directive.
@@ -143,6 +144,9 @@ type FileSummary struct {
 	Package string
 	Imports []Import
 	Symbols []*Symbol
+	// StringArgs are the plain string literals passed as call arguments,
+	// for message key checks.
+	StringArgs []StringArg
 }
 
 // Extract returns the package, imports and declarations of a parsed file.
@@ -160,6 +164,7 @@ func Extract(path string, src []byte, tree *ts.Tree, m *protocol.Mapper) *FileSu
 	}
 	x.visit(root, x.sum.Package, "")
 	markInterfaceMembers(x.sum)
+	x.sum.StringArgs = stringArguments(root, src, m)
 	return x.sum
 }
 
@@ -494,7 +499,8 @@ func (x *extractor) params(list *ts.Node, kind string) []Param {
 			continue
 		}
 		rng, _ := x.m.OffsetRange(int(name.StartByte()), int(name.EndByte()))
-		out = append(out, Param{Name: text(name, x.src), Type: declaredTypeText(p, x.src), SelectionRange: rng, Vararg: isVararg(p, x.src)})
+		out = append(out, Param{Name: text(name, x.src), Type: declaredTypeText(p, x.src), SelectionRange: rng,
+			Vararg: isVararg(p, x.src), PropertyKey: hasParamModifier(p, x.src, "@PropertyKey")})
 	}
 	return out
 }
@@ -502,12 +508,16 @@ func (x *extractor) params(list *ts.Node, kind string) []Param {
 // isVararg reports whether a parameter is declared vararg. In function
 // parameter lists the modifiers are the preceding sibling node; in class
 // parameters they are a child.
-func isVararg(p *ts.Node, src []byte) bool {
+func isVararg(p *ts.Node, src []byte) bool { return hasParamModifier(p, src, "vararg") }
+
+// hasParamModifier reports whether a parameter's modifiers (annotations
+// included) contain s.
+func hasParamModifier(p *ts.Node, src []byte, s string) bool {
 	mods := child(p, "modifiers", "parameter_modifiers")
 	if prev := p.PrevNamedSibling(); mods == nil && prev != nil && prev.Kind() == "parameter_modifiers" {
 		mods = prev
 	}
-	return mods != nil && strings.Contains(text(mods, src), "vararg")
+	return mods != nil && strings.Contains(text(mods, src), s)
 }
 
 // receiverType returns the receiver type of an extension declaration.

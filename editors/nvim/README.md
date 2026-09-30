@@ -93,3 +93,28 @@ vim.lsp.config("ktpls", {
   },
 })
 ```
+
+## Message keys
+
+Like IntelliJ's check of property keys, ktpls warns about a string passed
+where a message key is expected that isn't in the project's message
+bundles (`src/main/resources/messages.properties` and its locales, or the
+bundles named by `spring.messages.basename`), suggesting the closest key.
+Hover on a key shows its message in each locale, and go to definition
+opens it in the bundles.
+
+Which parameters take keys is learned from the code: a parameter most of
+whose string arguments are keys (at least 3, 80% or more), like an
+exception's `code`, takes keys; so do parameters annotated `@PropertyKey`.
+This needs no analyzer and works as you type.
+
+```lua
+vim.lsp.config("ktpls", {
+  init_options = {
+    messages = {
+      enabled = true,
+      keyParameters = { "ApiError(code)" },  -- more, as "Function(param)"
+    },
+  },
+})
+```

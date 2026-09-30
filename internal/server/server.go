@@ -61,7 +61,8 @@ type Server struct {
 	root     string
 	diagMode string // modeAnalyzer, modeGradle or modeOff; guarded by mu
 
-	az analyzerState
+	az  analyzerState
+	msg messagesState
 
 	started time.Time // when the server was created, for startup timings
 }

@@ -25,7 +25,13 @@ type initOptions struct {
 	// (the project's build, on save) or "off".
 	Diagnostics string          `json:"diagnostics"`
 	Compile     *compileOptions `json:"compile"`
-	Analyzer    *struct {
+	Messages    *struct {
+		Enabled *bool `json:"enabled"` // check message keys (default true)
+		// KeyParameters are parameters taking message keys besides the
+		// learned ones, as "Function(param)" or "Class(param)".
+		KeyParameters []string `json:"keyParameters"`
+	} `json:"messages"`
+	Analyzer *struct {
 		Jar       string `json:"jar"`       // default: analyzer.jar next to ktpls
 		JavaHome  string `json:"javaHome"`  // default: compile.env.JAVA_HOME, $JAVA_HOME, java on PATH
 		MaxMemory string `json:"maxMemory"` // JVM -Xmx, default "2g"
