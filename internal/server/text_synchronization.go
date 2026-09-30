@@ -37,6 +37,12 @@ func (s *Server) DidChange(ctx context.Context, params *protocol.DidChangeTextDo
 	}
 	s.session.Change(path, params.TextDocument.Version, content)
 	s.scheduleDiagnostics(path)
+	s.mu.Lock()
+	live := s.diagMode == modeAnalyzer
+	s.mu.Unlock()
+	if live {
+		s.analyzerChanged(path)
+	}
 	return nil
 }
 

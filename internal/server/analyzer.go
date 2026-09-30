@@ -26,6 +26,7 @@ type analyzerState struct {
 	restarts  int
 	timer     *time.Timer
 	saved     map[string]bool                  // saved since the last rebuild
+	live      map[string]*time.Timer           // pending live checks
 	diags     map[string][]protocol.Diagnostic // per file
 	rebuildMu sync.Mutex                       // one rebuild at a time
 }
