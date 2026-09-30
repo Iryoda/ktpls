@@ -22,12 +22,23 @@ dependencies {
         "analysis-api-k2-for-ide", "low-level-api-fir-for-ide", "analysis-api-platform-interface-for-ide",
         "symbol-light-classes-for-ide", "kotlin-compiler-common-for-ide",
     ).forEach { implementation("org.jetbrains.kotlin:$it:$kotlinVersion") { isTransitive = false } }
+    implementation("org.jetbrains.kotlin:kotlin-allopen-compiler-plugin:$kotlinVersion") { isTransitive = false }
     implementation("com.github.ben-manes.caffeine:caffeine:2.9.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.8.1")
 }
 
-kotlin { jvmToolchain(21) }
+kotlin {
+    jvmToolchain(21)
+    compilerOptions {
+        optIn.addAll(
+            "org.jetbrains.kotlin.analysis.api.KaExperimentalApi",
+            "org.jetbrains.kotlin.analysis.api.KaPlatformInterface",
+            "org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi",
+            "org.jetbrains.kotlin.config.CompilerConfiguration.Internals",
+        )
+    }
+}
 application { mainClass.set("SpikeKt") }
 
 

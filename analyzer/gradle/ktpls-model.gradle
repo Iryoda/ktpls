@@ -1,15 +1,26 @@
-// Prints each project's source sets: source folders and compile classpath.
+// ktpls project model: prints, for each project's source sets, the source
+// folders, the compile classpath and the Kotlin compiler plugin options.
+// Lines are tab-separated: KIND, project path, source set, value.
 allprojects {
     tasks.register('ktplsModel') {
         doLast {
             def ss = project.extensions.findByName('sourceSets')
             if (ss == null) return
             ss.each { s ->
-                def dirs = [] + s.java.srcDirs
+                def dirs = new LinkedHashSet(s.java.srcDirs)
                 def k = s.extensions.findByName('kotlin')
-                if (k != null) dirs += k.srcDirs
+                if (k != null) dirs.addAll(k.srcDirs)
                 println "KTPLS-SOURCES\t${project.path}\t${s.name}\t" + dirs.findAll { it.exists() }.join(File.pathSeparator)
                 println "KTPLS-CLASSPATH\t${project.path}\t${s.name}\t" + s.compileClasspath.files.join(File.pathSeparator)
+                def taskName = s.getCompileTaskName('kotlin')
+                def t = project.tasks.findByName(taskName)
+                if (t != null && t.hasProperty('pluginOptions')) {
+                    t.pluginOptions.get().each { cfg ->
+                        cfg.allOptions().each { id, opts ->
+                            opts.each { o -> println "KTPLS-PLUGIN\t${project.path}\t${s.name}\t${id}:${o.key}=${o.value}" }
+                        }
+                    }
+                }
             }
         }
     }
