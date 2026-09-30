@@ -54,8 +54,14 @@ type Server struct {
 	savedSinceBuild  map[string]bool
 	lastBuildFailure string
 
-	builder  *build.Runner // nil: no compiler diagnostics
+	builder  *build.Runner // nil: no Gradle compiler diagnostics
 	progress bool          // the client shows work-done progress
+
+	opts     initOptions
+	root     string
+	diagMode string // modeAnalyzer, modeGradle or modeOff; guarded by mu
+
+	az analyzerState
 }
 
 // rescanInterval is the minimum time between background rescans of the

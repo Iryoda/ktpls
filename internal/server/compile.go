@@ -20,35 +20,86 @@ import (
 
 // initOptions are the client's initializationOptions.
 type initOptions struct {
-	Compile *struct {
-		Enabled *bool             `json:"enabled"`
-		Command []string          `json:"command"`
-		Tasks   []string          `json:"tasks"`
-		Env     map[string]string `json:"env"`
-	} `json:"compile"`
+	// Diagnostics chooses where compiler diagnostics come from:
+	// "analyzer" (the default: the analyzer process, on save), "gradle"
+	// (the project's build, on save) or "off".
+	Diagnostics string          `json:"diagnostics"`
+	Compile     *compileOptions `json:"compile"`
+	Analyzer    *struct {
+		Jar       string `json:"jar"`       // default: analyzer.jar next to ktpls
+		JavaHome  string `json:"javaHome"`  // default: compile.env.JAVA_HOME, $JAVA_HOME, java on PATH
+		MaxMemory string `json:"maxMemory"` // JVM -Xmx, default "2g"
+	} `json:"analyzer"`
 }
 
-// setupCompile creates the build runner, if the project has a build and
-// the client didn't disable compilation.
-func (s *Server) setupCompile(root string, raw json.RawMessage, progress bool) {
-	cfg := build.Config{Enabled: true}
-	var opts initOptions
+type compileOptions struct {
+	Enabled *bool             `json:"enabled"`
+	Command []string          `json:"command"`
+	Tasks   []string          `json:"tasks"`
+	Env     map[string]string `json:"env"`
+}
+
+const (
+	modeAnalyzer = "analyzer"
+	modeGradle   = "gradle"
+	modeOff      = "off"
+)
+
+// setupDiagnostics reads the options and prepares compiler diagnostics;
+// they start once the workspace is loaded (startCompilerDiagnostics).
+func (s *Server) setupDiagnostics(root string, raw json.RawMessage, progress bool) {
 	if len(raw) > 0 {
-		if err := json.Unmarshal(raw, &opts); err != nil {
+		if err := json.Unmarshal(raw, &s.opts); err != nil {
 			s.log.Warn("invalid initializationOptions", "err", err)
 		}
 	}
-	if c := opts.Compile; c != nil {
-		if c.Enabled != nil {
-			cfg.Enabled = *c.Enabled
-		}
+	s.root, s.progress = root, progress
+	s.diagMode = s.opts.Diagnostics
+	if c := s.opts.Compile; s.diagMode == "" && c != nil && c.Enabled != nil && !*c.Enabled {
+		s.diagMode = modeOff // the older way to turn compilation off
+	}
+	switch s.diagMode {
+	case modeGradle, modeOff:
+	default:
+		s.diagMode = modeAnalyzer
+	}
+	if s.diagMode == modeGradle {
+		s.setupGradle()
+	}
+	s.log.Info("compiler diagnostics", "mode", s.diagMode)
+}
+
+// setupGradle creates the build runner, if the project has a build.
+func (s *Server) setupGradle() {
+	cfg := build.Config{Enabled: true}
+	if c := s.opts.Compile; c != nil {
 		cfg.Command, cfg.Tasks, cfg.Env = c.Command, c.Tasks, c.Env
 	}
-	s.progress = progress
-	s.builder = build.NewRunner(root, cfg, s.log, s.buildStarted, s.buildDone)
-	if s.builder == nil {
-		s.log.Info("compiler diagnostics off", "enabled", cfg.Enabled)
+	s.builder = build.NewRunner(s.root, cfg, s.log, s.buildStarted, s.buildDone)
+}
+
+// startCompilerDiagnostics starts compiler diagnostics after the
+// workspace is loaded: the analyzer, or a first build.
+func (s *Server) startCompilerDiagnostics() {
+	switch s.diagMode {
+	case modeAnalyzer:
+		go s.startAnalyzer()
+	case modeGradle:
+		s.requestBuild()
 	}
+}
+
+// fallBackToGradle switches to compiler diagnostics by Gradle build when
+// the analyzer can't run.
+func (s *Server) fallBackToGradle(reason error) {
+	s.log.Warn("analyzer unavailable, using Gradle builds", "err", reason)
+	s.client.Notify("window/showMessage", &protocol.LogMessageParams{Type: protocol.MessageWarning,
+		Message: "ktpls: the analyzer can't run, so compiler diagnostics come from Gradle builds on save:\n" + textutil.Truncate(reason.Error(), 400)})
+	s.mu.Lock()
+	s.diagMode = modeGradle
+	s.mu.Unlock()
+	s.setupGradle()
+	s.requestBuild()
 }
 
 // requestBuild asks for a build (a no-op without a build).

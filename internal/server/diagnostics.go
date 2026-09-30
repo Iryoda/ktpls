@@ -74,6 +74,7 @@ func (s *Server) publishDiagnostics(path string) {
 		if len(msgs) > 0 {
 			diags = s.compileDiagnostics(fileContent(sn, path), msgs)
 		}
+		diags = append(diags, s.analyzerDiagnostics(path)...)
 		if !open {
 			return
 		}

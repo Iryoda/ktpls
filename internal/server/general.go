@@ -23,7 +23,7 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 	s.log.Info("initialize", "session", session.String())
 
 	progress := params.Capabilities.Window != nil && params.Capabilities.Window.WorkDoneProgress
-	s.setupCompile(root, params.InitializationOptions, progress)
+	s.setupDiagnostics(root, params.InitializationOptions, progress)
 
 	s.mu.Lock()
 	s.session = session
@@ -94,7 +94,7 @@ func (s *Server) loadWorkspace() {
 		s.lastScan = time.Now()
 		s.mu.Unlock()
 		close(s.loaded)
-		s.requestBuild() // report the project's compiler errors on startup
+		s.startCompilerDiagnostics() // report the project's compiler errors on startup
 	}()
 	start := time.Now()
 	n, err := s.session.LoadWorkspace(s.ctx)
@@ -127,6 +127,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 // Close releases what the server started: a running build, and the
 // Gradle/Kotlin daemons its builds started.
 func (s *Server) Close() {
+	s.closeAnalyzer()
 	s.cancel()
 	if s.builder != nil {
 		s.builder.Close()

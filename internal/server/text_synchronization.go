@@ -72,6 +72,13 @@ func (s *Server) DidSave(ctx context.Context, params *protocol.DidSaveTextDocume
 	}
 	base := filepath.Base(path)
 	if cache.IsKotlinFile(path) || strings.HasSuffix(base, ".gradle") || base == "gradle.properties" {
+		s.mu.Lock()
+		mode := s.diagMode
+		s.mu.Unlock()
+		if mode == modeAnalyzer {
+			s.analyzerSaved(path)
+			return nil
+		}
 		s.diagMu.Lock()
 		s.savedSinceBuild[path] = true
 		s.diagMu.Unlock()
