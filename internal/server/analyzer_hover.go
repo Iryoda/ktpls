@@ -119,13 +119,18 @@ func hoverMarkdown(h *analyzer.HoverInfo) string {
 	var b strings.Builder
 	b.WriteString(kotlin.CodeBlock(h.Signature))
 	if h.Call != "" {
-		b.WriteString("\n\n*in this call:*\n```kotlin\n" + h.Call + "\n```")
+		b.WriteString("\n\n*in this call:*\n```kotlin\n")
+		b.WriteString(h.Call)
+		b.WriteString("\n```")
 	}
 	if h.Container != "" {
-		b.WriteString("\n\n*in `" + h.Container + "`*")
+		b.WriteString("\n\n*in `")
+		b.WriteString(h.Container)
+		b.WriteString("`*")
 	}
 	if doc := renderDoc(h); doc != "" {
-		b.WriteString("\n\n---\n\n" + doc)
+		b.WriteString("\n\n---\n\n")
+		b.WriteString(doc)
 	}
 	return b.String()
 }

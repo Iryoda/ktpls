@@ -25,7 +25,7 @@ type Mapper struct {
 // afterwards.
 func NewMapper(content []byte, enc PositionEncodingKind) *Mapper {
 	starts := []int{0}
-	for i := 0; i < len(content); i++ {
+	for i := range content {
 		switch content[i] {
 		case '\n':
 			starts = append(starts, i+1)

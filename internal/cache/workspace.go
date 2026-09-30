@@ -260,6 +260,9 @@ func parsedGitignore(path string, st stamp, rel string) []gitRule {
 			rules = append(rules, r)
 		}
 	}
+	if sc.Err() != nil {
+		return rules // read in part: not cached, so it is read again
+	}
 	gitignoreCache.Store(path, cachedGitignore{st, rules})
 	return rules
 }
@@ -276,8 +279,8 @@ func parseGitRule(line string) (gitRule, bool) {
 	} else if strings.HasPrefix(line, "\\") {
 		line = line[1:] // escaped leading ! or #
 	}
-	if strings.HasSuffix(line, "/") {
-		r.dirOnly, line = true, strings.TrimSuffix(line, "/")
+	if before, ok := strings.CutSuffix(line, "/"); ok {
+		r.dirOnly, line = true, before
 	}
 	// A slash anywhere but the end anchors the pattern to the
 	// .gitignore's directory; otherwise it matches at any depth.

@@ -356,8 +356,8 @@ func namedLabels(t *testing.T, call string) []string {
 	_, labels := complete(t, strings.Replace(filledSrc, "CALL", call, 1))
 	var out []string
 	for _, l := range labels {
-		if strings.HasSuffix(l, " =") {
-			out = append(out, strings.TrimSuffix(l, " ="))
+		if before, ok := strings.CutSuffix(l, " ="); ok {
+			out = append(out, before)
 		}
 	}
 	slices.Sort(out)

@@ -68,7 +68,7 @@ func Reparse(old *ts.Tree, oldSrc, newSrc []byte) *ts.Tree {
 // pointAt returns tree-sitter's (row, byte column) for offset off.
 func pointAt(src []byte, off int) ts.Point {
 	row, lineStart := 0, 0
-	for i := 0; i < off; i++ {
+	for i := range off {
 		if src[i] == '\n' {
 			row++
 			lineStart = i + 1

@@ -70,7 +70,8 @@ func signatureInfo(fn *Symbol, arg int, named string) (protocol.SignatureInforma
 		}
 	}
 	var b strings.Builder
-	b.WriteString(name + "(")
+	b.WriteString(name)
+	b.WriteString("(")
 	info := protocol.SignatureInformation{Parameters: []protocol.ParameterInformation{}}
 	active := -1
 	for i, p := range fn.Params {
@@ -83,7 +84,8 @@ func signatureInfo(fn *Symbol, arg int, named string) (protocol.SignatureInforma
 		}
 		b.WriteString(p.Name)
 		if p.Type != "" {
-			b.WriteString(": " + p.Type)
+			b.WriteString(": ")
+			b.WriteString(p.Type)
 		}
 		info.Parameters = append(info.Parameters, protocol.ParameterInformation{Label: [2]uint32{start, uint32(textutil.UTF16Len(b.String()))}})
 		switch {
@@ -95,7 +97,8 @@ func signatureInfo(fn *Symbol, arg int, named string) (protocol.SignatureInforma
 	}
 	b.WriteString(")")
 	if fn.Kind == KindFunction && fn.Type != "" {
-		b.WriteString(": " + fn.Type)
+		b.WriteString(": ")
+		b.WriteString(fn.Type)
 	}
 	info.Label = b.String()
 	if fn.Doc != "" {

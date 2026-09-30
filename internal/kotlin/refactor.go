@@ -415,9 +415,12 @@ func (r *resolver) stringTemplate(off int) []Action {
 		case o.Kind() == "integer_literal" && textutil.IsDigits(t):
 			b.WriteString(t)
 		case o.Kind() == "simple_identifier" && !startsIdent(i+1):
-			b.WriteString("$" + t)
+			b.WriteString("$")
+			b.WriteString(t)
 		default:
-			b.WriteString("${" + t + "}")
+			b.WriteString("${")
+			b.WriteString(t)
+			b.WriteString("}")
 		}
 	}
 	return []Action{{Title: "Convert concatenation to string template", Kind: protocol.RefactorRewrite,

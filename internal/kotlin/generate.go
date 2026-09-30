@@ -188,9 +188,11 @@ func (r *resolver) overrideText(m inherited, p *porter) (string, bool) {
 	}
 	b.WriteString("fun ")
 	if tps := typeParamClause(s.Signature); tps != "" {
-		b.WriteString(tps + " ")
+		b.WriteString(tps)
+		b.WriteString(" ")
 	}
-	b.WriteString(s.Name + "(")
+	b.WriteString(s.Name)
+	b.WriteString("(")
 	for i, prm := range s.Params {
 		if i > 0 {
 			b.WriteString(", ")
@@ -202,7 +204,9 @@ func (r *resolver) overrideText(m inherited, p *porter) (string, bool) {
 		if prm.Vararg {
 			b.WriteString("vararg ")
 		}
-		b.WriteString(prm.Name + ": " + t)
+		b.WriteString(prm.Name)
+		b.WriteString(": ")
+		b.WriteString(t)
 	}
 	b.WriteString(")")
 	if s.Type != "" && s.Type != "Unit" {
@@ -210,7 +214,8 @@ func (r *resolver) overrideText(m inherited, p *porter) (string, bool) {
 		if !ok {
 			return "", false
 		}
-		b.WriteString(": " + t)
+		b.WriteString(": ")
+		b.WriteString(t)
 	}
 	b.WriteString(" {\n" + indentUnit + todoCall + "\n}")
 	return b.String(), true

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -49,6 +50,9 @@ func fakeAnalyzer() {
 		default:
 			out.Encode(map[string]any{"id": req.ID, "error": "unknown method " + req.Method})
 		}
+	}
+	if err := sc.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "fake analyzer:", err)
 	}
 }
 

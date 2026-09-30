@@ -142,9 +142,9 @@ class Controller(private val service: Service) {
 					continue
 				}
 				edited := line
-				for k := len(actions[0].Edits) - 1; k >= 0; k-- {
-					at := int(actions[0].Edits[k].Range.Start.Character)
-					edited = edited[:at] + actions[0].Edits[k].NewText + edited[at:]
+				for _, v := range slices.Backward(actions[0].Edits) {
+					at := int(v.Range.Start.Character)
+					edited = edited[:at] + v.NewText + edited[at:]
 				}
 				if !strings.HasSuffix(edited, want) {
 					t.Errorf("line %d: got %q", i+1, strings.TrimSpace(edited))

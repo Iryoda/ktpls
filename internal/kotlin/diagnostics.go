@@ -2,6 +2,7 @@ package kotlin
 
 import (
 	"fmt"
+	"maps"
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
@@ -85,9 +86,7 @@ func firstToken(n *ts.Node) *ts.Node {
 // (as counted by key): the ones introduced since the baseline was taken.
 func NewSyntaxErrors(current []SyntaxError, baseline map[string]int) []SyntaxError {
 	left := make(map[string]int, len(baseline))
-	for k, v := range baseline {
-		left[k] = v
-	}
+	maps.Copy(left, baseline)
 	var out []SyntaxError
 	for _, e := range current {
 		if left[e.Key] > 0 {

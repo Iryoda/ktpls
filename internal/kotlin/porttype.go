@@ -41,7 +41,7 @@ func ctxOf(t typeRef) typeCtx { return typeCtx{sum: t.sum, container: t.containe
 var defaultTypes = map[string]bool{}
 
 func init() {
-	for _, t := range strings.Fields(`Any Unit Nothing String CharSequence Int Long Short Byte Double
+	for t := range strings.FieldsSeq(`Any Unit Nothing String CharSequence Int Long Short Byte Double
 		Float Boolean Char Number Comparable Throwable Exception RuntimeException Error
 		IllegalArgumentException IllegalStateException UnsupportedOperationException
 		IndexOutOfBoundsException NoSuchElementException NullPointerException ArithmeticException

@@ -71,6 +71,10 @@ func Start(java, jar string, jvmArgs []string, log *slog.Logger) (*Client, error
 		for sc.Scan() {
 			log.Debug("analyzer", "stderr", sc.Text())
 		}
+		if err := sc.Err(); err != nil {
+			log.Debug("analyzer: reading stderr", "err", err)
+			io.Copy(io.Discard, stderr) // keep draining, or the JVM blocks writing
+		}
 	}()
 	return c, nil
 }
@@ -91,6 +95,12 @@ func (c *Client) readLoop(out io.Reader) {
 		if ch != nil {
 			ch <- r
 		}
+	}
+	if err := sc.Err(); err != nil {
+		// A response too long to read: the protocol is out of step, so
+		// the process is stopped (and restarted by its watcher).
+		c.log.Warn("analyzer: reading responses", "err", err)
+		killGroup(c.cmd)
 	}
 	err := c.cmd.Wait()
 	if err == nil {

@@ -42,9 +42,10 @@ func WriteModel(ctx context.Context, root string, gradle []string, env []string)
 		return "", fmt.Errorf("reading the Gradle project model: %w: %s", err, lastLines(stderr.String(), 5))
 	}
 	var model bytes.Buffer
-	for _, line := range strings.Split(out.String(), "\n") {
+	for line := range strings.SplitSeq(out.String(), "\n") {
 		if strings.HasPrefix(line, "KTPLS-") {
-			model.WriteString(line + "\n")
+			model.WriteString(line)
+			model.WriteString("\n")
 		}
 	}
 	if !bytes.Contains(model.Bytes(), []byte("KTPLS-SOURCES")) {
@@ -82,7 +83,7 @@ func DownloadSources(ctx context.Context, root string, gradle, env []string) (ha
 	if err := cmd.Run(); err != nil {
 		return 0, 0, fmt.Errorf("downloading sources: %w: %s", err, lastLines(stderr.String(), 5))
 	}
-	for _, line := range strings.Split(out.String(), "\n") {
+	for line := range strings.SplitSeq(out.String(), "\n") {
 		var project string
 		var h, a int
 		if _, err := fmt.Sscanf(line, "KTPLS-SOURCES-JARS\t%s\t%d\t%d", &project, &h, &a); err == nil {

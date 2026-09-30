@@ -144,7 +144,7 @@ func basenames(dir string) []string {
 		return []string{"messages"}
 	}
 	var out []string
-	for _, v := range strings.Split(value, ",") {
+	for v := range strings.SplitSeq(value, ",") {
 		v = strings.TrimSpace(v)
 		v = strings.TrimPrefix(strings.TrimPrefix(v, "classpath:"), "/")
 		v = strings.ReplaceAll(v, ".", "/") // Spring accepts dotted names

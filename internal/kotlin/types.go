@@ -1,6 +1,7 @@
 package kotlin
 
 import (
+	"slices"
 	"strings"
 
 	ts "github.com/tree-sitter/go-tree-sitter"
@@ -272,8 +273,8 @@ func (r *resolver) lambdaParamType(lambda *ts.Node, i, depth int) typeRef {
 	// A workspace function with a function-typed parameter:
 	// fun each(block: (Account) -> Unit).
 	for _, f := range r.callables(r.resolve(name)) {
-		for j := len(f.Params) - 1; j >= 0; j-- {
-			if params, ok := functionTypeParams(f.Params[j].Type); ok {
+		for _, v := range slices.Backward(f.Params) {
+			if params, ok := functionTypeParams(v.Type); ok {
 				if i < len(params) {
 					return typeRef{params[i], r.ix.File(f.Path), f.Container}
 				}

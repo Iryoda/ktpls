@@ -53,10 +53,10 @@ func Complete(f *ParsedFile, ix *Index, offset int) *protocol.CompletionList {
 	}
 	editRange, _ := f.Mapper.OffsetRange(start, offset)
 	c := &completer{
-		resolver: resolver{f: f, ix: ix, src: src},
-		prefix:   prefix,
-		edit:     editRange,
-		seen:     map[string]bool{},
+		f: f, ix: ix, src: src,
+		prefix: prefix,
+		edit:   editRange,
+		seen:   map[string]bool{},
 
 		overloads: map[int]int{},
 	}
@@ -286,7 +286,7 @@ func (c *completer) scope(offset int) {
 		inArgs = c.namedArguments(offset)
 	}
 	if anchor != nil && !typesOnly {
-		visibleLocals(anchor, uint(offset), c.src, func(l local) bool {
+		visibleLocals(anchor, uint(offset), func(l local) bool {
 			c.addLocal(l)
 			return true
 		})

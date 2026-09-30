@@ -11,11 +11,11 @@ import (
 func RenderJavadoc(comment string) string {
 	body := strings.TrimSuffix(strings.TrimPrefix(comment, "/**"), "*/")
 	var lines []string
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		line = strings.TrimRight(line, " \t\r")
 		trimmed := strings.TrimLeft(line, " \t")
-		if strings.HasPrefix(trimmed, "*") {
-			line = strings.TrimPrefix(strings.TrimPrefix(trimmed, "*"), " ")
+		if after, ok := strings.CutPrefix(trimmed, "*"); ok {
+			line = strings.TrimPrefix(after, " ")
 		} else {
 			line = trimmed
 		}
@@ -23,7 +23,7 @@ func RenderJavadoc(comment string) string {
 	}
 	text := javadocHTML(javadocInline(strings.Join(lines, "\n")))
 	var out []string
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		out = append(out, " * "+line)
 	}
 	return RenderKDoc("/**\n" + strings.Join(out, "\n") + "\n */")
@@ -54,16 +54,22 @@ func javadocInline(s string) string {
 		}
 		switch tag {
 		case "code", "literal":
-			b.WriteString("`" + escapeHTML(arg) + "`") // kept through the HTML pass
+			b.WriteString("`")
+			b.WriteString(escapeHTML(arg))
+			b.WriteString("`") // kept through the HTML pass
 		case "link", "linkplain":
 			target, label, _ := strings.Cut(arg, " ")
 			if label = strings.TrimSpace(label); label != "" {
 				b.WriteString(label)
 			} else {
-				b.WriteString("`" + strings.ReplaceAll(strings.TrimPrefix(target, "#"), "#", ".") + "`")
+				b.WriteString("`")
+				b.WriteString(strings.ReplaceAll(strings.TrimPrefix(target, "#"), "#", "."))
+				b.WriteString("`")
 			}
 		case "value":
-			b.WriteString("`" + escapeHTML(arg) + "`")
+			b.WriteString("`")
+			b.WriteString(escapeHTML(arg))
+			b.WriteString("`")
 		default: // {@inheritDoc} and others
 			b.WriteString(arg)
 		}

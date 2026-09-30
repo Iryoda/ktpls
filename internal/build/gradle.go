@@ -73,7 +73,7 @@ var (
 // Summarize reads a build's output into a Result.
 func Summarize(out string, err error) Result {
 	res := Result{Messages: ParseOutput(out)}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if m := kotlinTaskRE.FindStringSubmatch(strings.TrimRight(line, "\r")); m != nil {
 			switch m[2] {
 			case "", "FAILED", "FROM-CACHE", "UP-TO-DATE":

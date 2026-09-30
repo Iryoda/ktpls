@@ -316,7 +316,7 @@ func TestReparseMatchesFullParse(t *testing.T) {
 	cur := src
 	tree := Parse(cur)
 	defer func() { tree.Close() }()
-	for i := 0; i < 300; i++ {
+	for i := range 300 {
 		start := next(len(cur) + 1)
 		end := min(len(cur), start+next(8))
 		edited := append(append(append([]byte{}, cur[:start]...), inserts[next(len(inserts))]...), cur[end:]...)

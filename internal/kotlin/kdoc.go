@@ -47,11 +47,11 @@ func RenderKDoc(comment string) string {
 	type tag struct{ name, arg, text string }
 	var tags []tag
 	inFence := false
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		line = strings.TrimRight(line, " \t\r")
 		trimmed := strings.TrimLeft(line, " \t")
-		if strings.HasPrefix(trimmed, "*") {
-			line = strings.TrimPrefix(trimmed, "*")
+		if after, ok := strings.CutPrefix(trimmed, "*"); ok {
+			line = after
 			line = strings.TrimPrefix(line, " ")
 		} else {
 			line = trimmed
@@ -97,13 +97,16 @@ func RenderKDoc(comment string) string {
 			b.WriteString("\n\n")
 		}
 		if title != "" {
-			b.WriteString("**" + title + "**\n")
+			b.WriteString("**")
+			b.WriteString(title)
+			b.WriteString("**\n")
 		}
 		for i, it := range items {
 			if i > 0 {
 				b.WriteString("\n")
 			}
-			b.WriteString("- " + it)
+			b.WriteString("- ")
+			b.WriteString(it)
 		}
 	}
 	item := func(t tag) string {
@@ -170,7 +173,9 @@ func links(s string) string {
 			i++
 			continue
 		}
-		b.WriteString("`" + s[m[2]:m[3]] + "`")
+		b.WriteString("`")
+		b.WriteString(s[m[2]:m[3]])
+		b.WriteString("`")
 		last = m[1]
 	}
 	b.WriteString(s[last:])

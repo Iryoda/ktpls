@@ -199,13 +199,18 @@ func (s *Server) messageHover(sn *cache.Snapshot, path string, pos protocol.Posi
 		return nil
 	}
 	var b strings.Builder
-	b.WriteString("```properties\n" + key + "\n```\n\n*message key*\n")
+	b.WriteString("```properties\n")
+	b.WriteString(key)
+	b.WriteString("\n```\n\n*message key*\n")
 	for _, e := range s.messageBundles().Keys[key] {
 		locale := e.Locale
 		if locale == "" {
 			locale = "default"
 		}
-		b.WriteString("\n- **" + locale + "**: " + e.Value)
+		b.WriteString("\n- **")
+		b.WriteString(locale)
+		b.WriteString("**: ")
+		b.WriteString(e.Value)
 	}
 	return &protocol.Hover{Contents: protocol.MarkupContent{Kind: protocol.Markdown, Value: b.String()}, Range: rng}
 }

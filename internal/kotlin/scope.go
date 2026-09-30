@@ -16,7 +16,7 @@ type local struct {
 // a declaration of name.
 func findLocal(use *ts.Node, name string, src []byte) *local {
 	var found *local
-	visibleLocals(use, use.StartByte(), src, func(l local) bool {
+	visibleLocals(use, use.StartByte(), func(l local) bool {
 		if text(l.name, src) == name {
 			found = &l
 			return false
@@ -29,7 +29,7 @@ func findLocal(use *ts.Node, name string, src []byte) *local {
 // visibleLocals calls yield for each local declaration visible at offset
 // pos, which lies in node n (n itself may be a scope), innermost
 // (shadowing) first, until yield returns false.
-func visibleLocals(n *ts.Node, pos uint, src []byte, yield func(local) bool) {
+func visibleLocals(n *ts.Node, pos uint, yield func(local) bool) {
 	for scope := n; scope != nil; scope = scope.Parent() {
 		if !scopeLocals(scope, pos, yield) {
 			return

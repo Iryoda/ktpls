@@ -20,7 +20,7 @@ func daemonPIDs() map[int]bool {
 		return nil
 	}
 	pids := map[int]bool{}
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 2 {
 			continue

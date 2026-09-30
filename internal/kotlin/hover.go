@@ -103,10 +103,13 @@ func (r *resolver) describe(t target) (md, where string) {
 	var b strings.Builder
 	b.WriteString(CodeBlock(sig))
 	if where != "" {
-		b.WriteString("\n\n*" + where + "*")
+		b.WriteString("\n\n*")
+		b.WriteString(where)
+		b.WriteString("*")
 	}
 	if doc != "" {
-		b.WriteString("\n\n---\n\n" + doc)
+		b.WriteString("\n\n---\n\n")
+		b.WriteString(doc)
 	}
 	return b.String(), where
 }
