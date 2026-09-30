@@ -98,6 +98,11 @@ func (s *Server) toProtocol(content []byte, ds []analyzer.Diagnostic) []protocol
 	var out []protocol.Diagnostic
 	for _, d := range ds {
 		start, end := utf16ToByte(content, d.Start), utf16ToByte(content, d.End)
+		if end == start+1 && content[start] == '=' {
+			// Some initializer errors point at the '='; show them on the value.
+			start = skipAssignment(content, start)
+			end = tokenEnd(content, start)
+		}
 		rng, err := m.OffsetRange(start, max(start, end))
 		if err != nil {
 			continue

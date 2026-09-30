@@ -22,7 +22,13 @@ return {
     source = {
         id = "pkg:generic/iryoda/ktpls@" .. version,
         build = {
-            run = ("CGO_ENABLED=1 go build -C %s -o \"$PWD/ktpls\" ./cmd/ktpls"):format(vim.fn.shellescape(root)),
+            -- ktpls itself, then the analyzer jar (optional: without it ktpls
+            -- falls back to Gradle builds for compiler diagnostics). The first
+            -- analyzer build downloads its dependencies and can take a while.
+            run = table.concat({
+                ("CGO_ENABLED=1 go build -C %s -o \"$PWD/ktpls\" ./cmd/ktpls"):format(vim.fn.shellescape(root)),
+                ("(cd %s/analyzer && ./gradlew -q shadowJar --no-configuration-cache && cp build/libs/analyzer.jar \"$OLDPWD/analyzer.jar\") || echo 'ktpls: analyzer.jar not built; using Gradle builds for diagnostics'"):format(vim.fn.shellescape(root)),
+            }, "\n"),
         },
     },
     bin = {
