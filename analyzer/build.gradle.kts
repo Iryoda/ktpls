@@ -26,6 +26,7 @@ dependencies {
     implementation("com.github.ben-manes.caffeine:caffeine:2.9.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.8.1")
 }
 
 kotlin {
@@ -39,7 +40,7 @@ kotlin {
         )
     }
 }
-application { mainClass.set("SpikeKt") }
+application { mainClass.set("ktpls.analyzer.MainKt") }
 
 
 tasks.shadowJar {

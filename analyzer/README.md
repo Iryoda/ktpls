@@ -17,6 +17,6 @@ file, with timings.
 Run the prototype:
 
 ```sh
-./gradlew -I analyzer/gradle/ktpls-model.gradle ktplsModel -q --no-configuration-cache > model.txt   # in the project
+./gradlew -I internal/analyzer/ktpls-model.gradle ktplsModel -q --no-configuration-cache > model.txt   # in the project
 java -Xmx4g -cp build/libs/analyzer.jar SpikeKt model.txt "$JAVA_HOME"
 ```
