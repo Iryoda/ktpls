@@ -35,6 +35,27 @@ func (s *Server) analyzerHover(ctx context.Context, path string, pos protocol.Po
 	}
 }
 
+// analyzerLocalHover describes a local variable or lambda parameter with
+// the type the compiler infers, as what it is (where).
+func (s *Server) analyzerLocalHover(ctx context.Context, path string, pos protocol.Position, where string) *protocol.Hover {
+	h, text, mapper := s.analyzerResolve(ctx, path, pos)
+	if h == nil {
+		return nil
+	}
+	rng, err := mapper.OffsetRange(textutil.UTF16ToByte(text, h.Start), textutil.UTF16ToByte(text, h.End))
+	if err != nil {
+		return nil
+	}
+	md := "```kotlin\n" + h.Signature + "\n```"
+	if where != "" {
+		md += "\n\n*" + where + "*"
+	}
+	if doc := renderDoc(h); doc != "" {
+		md += "\n\n---\n\n" + doc
+	}
+	return &protocol.Hover{Contents: protocol.MarkupContent{Kind: protocol.Markdown, Value: md}, Range: &rng}
+}
+
 // analyzerDefinition finds a library declaration with the analyzer: in
 // its sources jar, extracted for the editor to open.
 func (s *Server) analyzerDefinition(ctx context.Context, path string, pos protocol.Position) []protocol.Location {

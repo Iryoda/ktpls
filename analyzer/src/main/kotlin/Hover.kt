@@ -61,7 +61,8 @@ data class SourceLocation(val path: String, val jar: String?, val entry: String?
 @OptIn(KaExperimentalApi::class)
 fun hover(file: KtFile, offset: Int): HoverInfo? = analyze(file) {
     val leaf = file.findElementAt(offset) ?: return@analyze null
-    val ref = PsiTreeUtil.getParentOfType(leaf, KtNameReferenceExpression::class.java, false) ?: return@analyze null
+    val ref = PsiTreeUtil.getParentOfType(leaf, KtNameReferenceExpression::class.java, false)
+        ?: return@analyze declarationHover(leaf)
     val call = (ref.tryResolveCall() as? KaCallResolutionSuccess)?.call
     val resolved: KaSymbol = call?.signature?.symbol ?: ref.mainReference.resolveToSymbol() ?: return@analyze null
     // An inherited member (e.g. a repository's save): describe the original.
@@ -78,6 +79,22 @@ fun hover(file: KtFile, offset: Int): HoverInfo? = analyze(file) {
         container = containerOf(symbol),
         doc = source?.doc, docLanguage = source?.language,
         source = source?.location,
+    )
+}
+
+// declarationHover describes the declaration whose name is at leaf (e.g.
+// a lambda parameter, with its inferred type).
+private fun KaSession.declarationHover(leaf: PsiElement): HoverInfo? {
+    val decl = leaf.parent as? KtNamedDeclaration ?: return null
+    if (decl.nameIdentifier != leaf) return null
+    val symbol = decl.symbol
+    return HoverInfo(
+        start = leaf.textRange.startOffset, end = leaf.textRange.endOffset,
+        signature = symbol.render(declarationRenderer),
+        call = null,
+        container = containerOf(symbol),
+        doc = decl.docComment?.text, docLanguage = "kotlin",
+        source = null,
     )
 }
 

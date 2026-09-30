@@ -14,6 +14,7 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 		return nil, err
 	}
 	var hover *protocol.Hover
+	var local *kotlin.HoverResult
 	s.session.Read(func(sn *cache.Snapshot) {
 		var f *kotlin.ParsedFile
 		var release func()
@@ -22,15 +23,25 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 		}
 		defer release()
 		if h := kotlin.Hover(f, sn.Index(), f.Mapper.PositionOffset(params.Position)); h != nil {
+			if h.Local {
+				local = h
+			}
 			hover = &protocol.Hover{
 				Contents: protocol.MarkupContent{Kind: protocol.Markdown, Value: h.Markdown},
 				Range:    &h.Range,
 			}
 		}
 	})
-	if hover == nil && err == nil {
+	switch {
+	case err != nil:
+	case hover == nil:
 		// A library declaration, most likely: ask the compiler.
 		hover = s.analyzerHover(ctx, path, params.Position)
+	case local != nil:
+		// The compiler knows a local's type; the syntax only guesses it.
+		if h := s.analyzerLocalHover(ctx, path, params.Position, local.Where); h != nil {
+			hover = h
+		}
 	}
 	return hover, err
 }

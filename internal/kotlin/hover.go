@@ -12,6 +12,12 @@ import (
 type HoverResult struct {
 	Markdown string
 	Range    protocol.Range // the hovered identifier
+
+	// Local is set for a local variable or lambda parameter, whose type
+	// is inferred from the syntax alone (a guess, or missing); Where is
+	// what it is ("lambda parameter", ...).
+	Local bool
+	Where string
 }
 
 // Hover describes the declaration of the identifier at offset in f: its
@@ -28,22 +34,23 @@ func Hover(f *ParsedFile, ix *Index, offset int) *HoverResult {
 		if text(id, f.Content) == "it" {
 			if t := r.typeOf(id, 0); t.text != "" {
 				rng, _ := f.Mapper.OffsetRange(int(id.StartByte()), int(id.EndByte()))
-				return &HoverResult{Markdown: "```kotlin\nit: " + t.text + "\n```\n\n*implicit lambda parameter*", Range: rng}
+				return &HoverResult{Markdown: "```kotlin\nit: " + t.text + "\n```\n\n*implicit lambda parameter*", Range: rng,
+					Local: true, Where: "implicit lambda parameter"}
 			}
 		}
 		return nil
 	}
-	md := r.describe(targets[0])
+	md, where := r.describe(targets[0])
 	if n := len(targets) - 1; n > 0 {
 		md += fmt.Sprintf("\n\n_+%d other %s_", n, textutil.Plural(n, "candidate", "candidates"))
 	}
 	rng, _ := f.Mapper.OffsetRange(int(id.StartByte()), int(id.EndByte()))
-	return &HoverResult{Markdown: md, Range: rng}
+	return &HoverResult{Markdown: md, Range: rng, Local: targets[0].local != nil, Where: where}
 }
 
-// describe renders a target as markdown.
-func (r *resolver) describe(t target) string {
-	var sig, where, doc string
+// describe renders a target as markdown, and says what it is.
+func (r *resolver) describe(t target) (md, where string) {
+	var sig, doc string
 	switch {
 	case t.sym != nil:
 		s := t.sym
@@ -100,7 +107,7 @@ func (r *resolver) describe(t target) string {
 	if doc != "" {
 		b.WriteString("\n\n---\n\n" + doc)
 	}
-	return b.String()
+	return b.String(), where
 }
 
 func localKind(kind string) string {
