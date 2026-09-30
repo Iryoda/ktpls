@@ -31,7 +31,32 @@ Without Mason: run `make install` in the repository root, and make sure
 
 ## Compiler diagnostics
 
-In a Gradle project (a `gradlew`, or `gradle` on `PATH` with a build
+By default ktpls runs its **analyzer**: a sibling JVM process with the
+Kotlin compiler's front end (the Kotlin Analysis API), started after the
+workspace loads. When you save a file, its compiler errors and warnings
+come back in a fraction of a second (source `kotlin`); files affected by
+the change are re-checked in the background. The analyzer jar is built
+by the Mason install (the first build downloads its dependencies and can
+take a while). It uses up to 2 GB of memory and stops with ktpls.
+
+If the analyzer can't run (no jar, no Java, no Gradle model), ktpls falls
+back to Gradle builds on save and says so once.
+
+```lua
+vim.lsp.config("ktpls", {
+  init_options = {
+    diagnostics = "analyzer",   -- or "gradle" (build on save), or "off"
+    analyzer = {
+      javaHome = "/path/to/jdk",  -- default: compile.env.JAVA_HOME, $JAVA_HOME, java on PATH
+      maxMemory = "2g",
+    },
+  },
+})
+```
+
+### Gradle builds
+
+With `diagnostics = "gradle"`, in a Gradle project (a `gradlew`, or `gradle` on `PATH` with a build
 file), ktpls runs `compileKotlin compileTestKotlin` in the background
 after the workspace loads and after each save, and shows the Kotlin
 compiler's errors and warnings (source `kotlinc`). Progress shows up in
