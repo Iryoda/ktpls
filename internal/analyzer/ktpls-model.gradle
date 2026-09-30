@@ -25,3 +25,33 @@ allprojects {
         }
     }
 }
+
+// ktplsSources downloads the sources jars of the compile classpaths into
+// Gradle's cache, where the analyzer finds library documentation.
+allprojects {
+    tasks.register('ktplsSources') {
+        doLast {
+            def ss = project.extensions.findByName('sourceSets')
+            if (ss == null) return
+            def ids = new LinkedHashSet()
+            ss.each { s ->
+                def cfg = project.configurations.findByName(s.compileClasspathConfigurationName)
+                if (cfg == null || !cfg.canBeResolved) return
+                cfg.incoming.resolutionResult.allComponents.each { c ->
+                    if (c.id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier) ids.add(c.id)
+                }
+            }
+            def result = project.dependencies.createArtifactResolutionQuery()
+                .forComponents(ids)
+                .withArtifacts(org.gradle.jvm.JvmLibrary, org.gradle.language.base.artifact.SourcesArtifact)
+                .execute()
+            def n = 0
+            result.resolvedComponents.each { c ->
+                c.getArtifacts(org.gradle.language.base.artifact.SourcesArtifact).each { a ->
+                    if (a instanceof org.gradle.api.artifacts.result.ResolvedArtifactResult) n++
+                }
+            }
+            println "KTPLS-SOURCES-JARS\t${project.path}\t${n}\t${ids.size()}"
+        }
+    }
+}

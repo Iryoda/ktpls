@@ -61,6 +61,37 @@ func CacheFile(root, name string) (string, error) {
 	return filepath.Join(dir, name), err
 }
 
+// DownloadSources has Gradle download the sources jars of the project's
+// libraries into its cache (those missing; a no-op once they are there),
+// returning how many of how many libraries have sources.
+func DownloadSources(ctx context.Context, root string, gradle, env []string) (have, all int, err error) {
+	dir, err := cacheDir(root)
+	if err != nil {
+		return 0, 0, err
+	}
+	script := filepath.Join(dir, "ktpls-model.gradle")
+	if err := os.WriteFile(script, modelScript, 0o644); err != nil {
+		return 0, 0, err
+	}
+	args := append(append([]string{}, gradle[1:]...), "-I", script, "ktplsSources", "-q", "--no-configuration-cache")
+	cmd := exec.CommandContext(ctx, gradle[0], args...)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), env...)
+	var out, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &stderr
+	if err := cmd.Run(); err != nil {
+		return 0, 0, fmt.Errorf("downloading sources: %w: %s", err, lastLines(stderr.String(), 5))
+	}
+	for _, line := range strings.Split(out.String(), "\n") {
+		var project string
+		var h, a int
+		if _, err := fmt.Sscanf(line, "KTPLS-SOURCES-JARS\t%s\t%d\t%d", &project, &h, &a); err == nil {
+			have, all = have+h, all+a
+		}
+	}
+	return have, all, nil
+}
+
 // cacheDir returns (creating it) a per-project directory under the user
 // cache directory.
 func cacheDir(root string) (string, error) {

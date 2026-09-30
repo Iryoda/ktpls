@@ -30,6 +30,9 @@ type initOptions struct {
 		JavaHome  string `json:"javaHome"`  // default: compile.env.JAVA_HOME, $JAVA_HOME, java on PATH
 		MaxMemory string `json:"maxMemory"` // JVM -Xmx, default "2g"
 		Delay     int    `json:"delay"`     // ms of pause in typing before a check, default 150
+		// DownloadSources has Gradle fetch the libraries' sources jars,
+		// for docs and definitions (default true).
+		DownloadSources *bool `json:"downloadSources"`
 	} `json:"analyzer"`
 }
 

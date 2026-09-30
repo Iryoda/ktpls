@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"os"
 	"strings"
 	"time"
 
@@ -20,9 +21,50 @@ const hoverTimeout = 10 * time.Second
 // resolve: library declarations (their signature with this call's types,
 // and their docs from the library's sources jar).
 func (s *Server) analyzerHover(ctx context.Context, path string, pos protocol.Position) *protocol.Hover {
+	h, text, mapper := s.analyzerResolve(ctx, path, pos)
+	if h == nil {
+		return nil
+	}
+	rng, err := mapper.OffsetRange(textutil.UTF16ToByte(text, h.Start), textutil.UTF16ToByte(text, h.End))
+	if err != nil {
+		return nil
+	}
+	return &protocol.Hover{
+		Contents: protocol.MarkupContent{Kind: protocol.Markdown, Value: hoverMarkdown(h)},
+		Range:    &rng,
+	}
+}
+
+// analyzerDefinition finds a library declaration with the analyzer: in
+// its sources jar, extracted for the editor to open.
+func (s *Server) analyzerDefinition(ctx context.Context, path string, pos protocol.Position) []protocol.Location {
+	h, _, _ := s.analyzerResolve(ctx, path, pos)
+	if h == nil || h.Source == nil {
+		return nil
+	}
+	file, err := analyzer.SourceFile(h.Source)
+	if err != nil {
+		s.log.Debug("analyzer: definition", "err", err)
+		return nil
+	}
+	content, err := os.ReadFile(file)
+	if err != nil {
+		return nil
+	}
+	off := textutil.UTF16ToByte(content, h.Source.Offset)
+	rng, err := protocol.NewMapper(content, s.session.Encoding()).OffsetRange(off, off)
+	if err != nil {
+		return nil
+	}
+	return []protocol.Location{{URI: protocol.URIFromPath(file), Range: rng}}
+}
+
+// analyzerResolve asks the analyzer what the reference at pos in the file
+// at path is, in the file's current text (returned with its mapper).
+func (s *Server) analyzerResolve(ctx context.Context, path string, pos protocol.Position) (*analyzer.HoverInfo, []byte, *protocol.Mapper) {
 	c := s.analyzerClient()
 	if c == nil || !cache.IsKotlinFile(path) {
-		return nil
+		return nil, nil, nil
 	}
 	var text []byte
 	var mapper *protocol.Mapper
@@ -35,7 +77,7 @@ func (s *Server) analyzerHover(ctx context.Context, path string, pos protocol.Po
 		}
 	})
 	if mapper == nil {
-		return nil
+		return nil, nil, nil
 	}
 	off := mapper.PositionOffset(pos)
 	ctx, cancel := context.WithTimeout(ctx, hoverTimeout)
@@ -43,18 +85,11 @@ func (s *Server) analyzerHover(ctx context.Context, path string, pos protocol.Po
 	h, err := c.Hover(ctx, path, string(text), textutil.UTF16Len(text[:min(off, len(text))]))
 	if err != nil || h == nil || h.Signature == "" {
 		if err != nil {
-			s.log.Debug("analyzer: hover", "err", err)
+			s.log.Debug("analyzer: resolve", "err", err)
 		}
-		return nil
+		return nil, nil, nil
 	}
-	rng, err := mapper.OffsetRange(textutil.UTF16ToByte(text, h.Start), textutil.UTF16ToByte(text, h.End))
-	if err != nil {
-		return nil
-	}
-	return &protocol.Hover{
-		Contents: protocol.MarkupContent{Kind: protocol.Markdown, Value: hoverMarkdown(h)},
-		Range:    &rng,
-	}
+	return h, text, mapper
 }
 
 // hoverMarkdown renders the analyzer's hover like the syntax-based one:

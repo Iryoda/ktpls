@@ -246,20 +246,22 @@ private fun javaDeclaration(project: Project, name: String, text: String, owner:
 
 // Sources finds and reads libraries' sources jars.
 object Sources {
-    private val jars = HashMap<String, String?>()
+    private val jars = HashMap<String, String>()
     private val indexes = HashMap<String, Map<String, List<String>>>()
     private val entryNames = HashMap<String, Set<String>>()
 
     // jarFor returns the sources jar of a library jar: next to it (Maven
     // layout), or in a sibling directory (Gradle's cache).
+    // Misses aren't remembered: ktpls may download the sources meanwhile.
     fun jarFor(jar: String): String? = synchronized(this) {
-        jars.getOrPut(jar) {
-            val f = File(jar)
-            val name = f.name.removeSuffix(".jar") + "-sources.jar"
-            val beside = File(f.parentFile, name)
-            if (beside.isFile) return@getOrPut beside.path
-            f.parentFile?.parentFile?.listFiles()?.map { File(it, name) }?.firstOrNull { it.isFile }?.path
-        }
+        jars[jar]?.let { return it }
+        val f = File(jar)
+        val name = f.name.removeSuffix(".jar") + "-sources.jar"
+        val beside = File(f.parentFile, name)
+        val found = if (beside.isFile) beside.path
+        else f.parentFile?.parentFile?.listFiles()?.map { File(it, name) }?.firstOrNull { it.isFile }?.path
+        if (found != null) jars[jar] = found
+        found
     }
 
     // entries returns the entries named file, those in dir first.

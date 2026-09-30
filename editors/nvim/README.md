@@ -42,7 +42,11 @@ while). It uses up to 2 GB of memory and stops with ktpls.
 The analyzer also answers hovers ktpls can't resolve from the source
 alone: library declarations such as `save`, `map` or `getOrThrow` show
 their signature, the types of the call under the cursor, and their
-documentation, read from the library's `-sources.jar` in the Gradle cache.
+documentation, read from the library's `-sources.jar` in the Gradle cache;
+go to definition opens the declaration in those sources (extracted to
+`~/.cache/ktpls/sources`). After startup, ktpls has Gradle download the
+sources jars still missing, like IntelliJ does (`downloadSources = false`
+turns that off).
 
 Starting is quick after the first run: the Gradle project model is cached
 until a build file changes, the JVM keeps a class data sharing archive,
@@ -61,6 +65,7 @@ vim.lsp.config("ktpls", {
       javaHome = "/path/to/jdk",  -- default: compile.env.JAVA_HOME, $JAVA_HOME, java on PATH
       maxMemory = "2g",
       delay = 150,                -- ms of pause in typing before a check
+      downloadSources = true,     -- fetch libraries' sources jars for docs
     },
   },
 })

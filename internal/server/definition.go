@@ -23,5 +23,9 @@ func (s *Server) Definition(ctx context.Context, params *protocol.DefinitionPara
 		defer release()
 		locs = kotlin.Definition(f, sn.Index(), f.Mapper.PositionOffset(params.Position))
 	})
+	if len(locs) == 0 && err == nil {
+		// A library declaration, most likely: ask the compiler.
+		locs = s.analyzerDefinition(ctx, path, params.Position)
+	}
 	return locs, err
 }

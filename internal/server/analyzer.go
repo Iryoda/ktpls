@@ -33,6 +33,7 @@ type analyzerState struct {
 	rebuildMu sync.Mutex                       // one rebuild at a time
 
 	disk        map[string][]analyzer.Diagnostic // per file, as on disk: persisted
+	sourcesOnce sync.Once                        // library sources are downloaded once a session
 	restoreOnce sync.Once                        // the last run's diagnostics are shown on the first start
 	modelCached bool                             // the session's model came from the cache
 	gradle, env []string                         // how the model was read, to refresh it

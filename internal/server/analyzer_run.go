@@ -42,6 +42,7 @@ func (s *Server) startAnalyzer() {
 	s.log.Info("analyzer: all files diagnosed", "sinceStart", s.sinceStart())
 	s.saveDiagnostics()
 	s.refreshCachedModel()
+	s.az.sourcesOnce.Do(s.downloadSources)
 }
 
 // analyzerClient returns the running analyzer, or nil.
@@ -211,4 +212,22 @@ func (s *Server) refreshCachedModel() {
 		s.log.Info("analyzer: the project model changed; restarting")
 		s.restartAnalyzer()
 	}
+}
+
+// downloadSources fetches the libraries' sources jars, for their docs in
+// hovers and their declarations in go to definition.
+func (s *Server) downloadSources() {
+	if a := s.opts.Analyzer; a != nil && a.DownloadSources != nil && !*a.DownloadSources {
+		return
+	}
+	s.az.mu.Lock()
+	gradle, env := s.az.gradle, s.az.env
+	s.az.mu.Unlock()
+	start := time.Now()
+	have, all, err := analyzer.DownloadSources(s.ctx, s.root, gradle, env)
+	if err != nil {
+		s.log.Warn("analyzer: sources", "err", err)
+		return
+	}
+	s.log.Info("analyzer: library sources", "with", have, "libraries", all, "elapsed", time.Since(start).Round(time.Millisecond))
 }
