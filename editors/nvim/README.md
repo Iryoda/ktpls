@@ -32,12 +32,18 @@ Without Mason: run `make install` in the repository root, and make sure
 ## Compiler diagnostics
 
 By default ktpls runs its **analyzer**: a sibling JVM process with the
-Kotlin compiler's front end (the Kotlin Analysis API), started after the
-workspace loads. When you save a file, its compiler errors and warnings
-come back in a fraction of a second (source `kotlin`); files affected by
-the change are re-checked in the background. The analyzer jar is built
-by the Mason install (the first build downloads its dependencies and can
-take a while). It uses up to 2 GB of memory and stops with ktpls.
+Kotlin compiler's front end (the Kotlin Analysis API). As you type, the
+buffer's compiler errors and warnings come back in a fraction of a second
+(source `kotlin`), without saving; after a save, files affected by the
+change are re-checked in the background. The analyzer jar is built by the
+Mason install (the first build downloads its dependencies and can take a
+while). It uses up to 2 GB of memory and stops with ktpls.
+
+Starting is quick after the first run: the Gradle project model is cached
+until a build file changes, the JVM keeps a class data sharing archive,
+and the last run's diagnostics of unchanged files show at once while the
+analyzer catches up (open files are checked first). The caches live in
+`~/.cache/ktpls`.
 
 If the analyzer can't run (no jar, no Java, no Gradle model), ktpls falls
 back to Gradle builds on save and says so once.
@@ -49,6 +55,7 @@ vim.lsp.config("ktpls", {
     analyzer = {
       javaHome = "/path/to/jdk",  -- default: compile.env.JAVA_HOME, $JAVA_HOME, java on PATH
       maxMemory = "2g",
+      delay = 150,                -- ms of pause in typing before a check
     },
   },
 })

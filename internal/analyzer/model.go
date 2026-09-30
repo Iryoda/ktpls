@@ -54,6 +54,13 @@ func WriteModel(ctx context.Context, root string, gradle []string, env []string)
 	return path, os.WriteFile(path, model.Bytes(), 0o644)
 }
 
+// CacheFile returns the path of a file named name in the project's cache
+// directory.
+func CacheFile(root, name string) (string, error) {
+	dir, err := cacheDir(root)
+	return filepath.Join(dir, name), err
+}
+
 // cacheDir returns (creating it) a per-project directory under the user
 // cache directory.
 func cacheDir(root string) (string, error) {
@@ -64,6 +71,32 @@ func cacheDir(root string) (string, error) {
 	sum := sha256.Sum256([]byte(root))
 	dir := filepath.Join(base, "ktpls", "projects", filepath.Base(root)+"-"+hex.EncodeToString(sum[:6]))
 	return dir, os.MkdirAll(dir, 0o755)
+}
+
+// ClassArchive returns where to keep the JVM class data sharing archive
+// of an analyzer jar (one per jar build), or "" if there is no cache
+// directory.
+func ClassArchive(jar string) string {
+	info, err := os.Stat(jar)
+	if err != nil {
+		return ""
+	}
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	dir := filepath.Join(base, "ktpls")
+	if os.MkdirAll(dir, 0o755) != nil {
+		return ""
+	}
+	archive := filepath.Join(dir, fmt.Sprintf("analyzer-%d-%d.jsa", info.Size(), info.ModTime().Unix()))
+	old, _ := filepath.Glob(filepath.Join(dir, "analyzer-*.jsa"))
+	for _, p := range old {
+		if p != archive {
+			os.Remove(p) // an older jar's
+		}
+	}
+	return archive
 }
 
 func lastLines(s string, n int) string {

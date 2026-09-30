@@ -52,6 +52,9 @@ func (s *Server) closeAnalyzer() {
 	if s.az.timer != nil {
 		s.az.timer.Stop()
 	}
+	for _, t := range s.az.live {
+		t.Stop()
+	}
 	s.az.mu.Unlock()
 	if c != nil {
 		c.Close()

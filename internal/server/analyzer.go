@@ -27,8 +27,15 @@ type analyzerState struct {
 	timer     *time.Timer
 	saved     map[string]bool                  // saved since the last rebuild
 	live      map[string]*time.Timer           // pending live checks
+	inflight  map[string]bool                  // live checks running; false: run again after
+	lastEdit  time.Time                        // of any buffer, to hold rebuilds while typing
 	diags     map[string][]protocol.Diagnostic // per file
 	rebuildMu sync.Mutex                       // one rebuild at a time
+
+	disk        map[string][]analyzer.Diagnostic // per file, as on disk: persisted
+	restoreOnce sync.Once                        // the last run's diagnostics are shown on the first start
+	modelCached bool                             // the session's model came from the cache
+	gradle, env []string                         // how the model was read, to refresh it
 }
 
 const progressAnalyzer = "ktpls/analyzer"

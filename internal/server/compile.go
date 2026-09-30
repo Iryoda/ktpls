@@ -21,7 +21,7 @@ import (
 // initOptions are the client's initializationOptions.
 type initOptions struct {
 	// Diagnostics chooses where compiler diagnostics come from:
-	// "analyzer" (the default: the analyzer process, on save), "gradle"
+	// "analyzer" (the default: the analyzer process, as you type), "gradle"
 	// (the project's build, on save) or "off".
 	Diagnostics string          `json:"diagnostics"`
 	Compile     *compileOptions `json:"compile"`
@@ -29,6 +29,7 @@ type initOptions struct {
 		Jar       string `json:"jar"`       // default: analyzer.jar next to ktpls
 		JavaHome  string `json:"javaHome"`  // default: compile.env.JAVA_HOME, $JAVA_HOME, java on PATH
 		MaxMemory string `json:"maxMemory"` // JVM -Xmx, default "2g"
+		Delay     int    `json:"delay"`     // ms of pause in typing before a check, default 150
 	} `json:"analyzer"`
 }
 
@@ -75,16 +76,19 @@ func (s *Server) setupGradle() {
 	if c := s.opts.Compile; c != nil {
 		cfg.Command, cfg.Tasks, cfg.Env = c.Command, c.Tasks, c.Env
 	}
-	s.builder = build.NewRunner(s.root, cfg, s.log, s.buildStarted, s.buildDone)
+	b := build.NewRunner(s.root, cfg, s.log, s.buildStarted, s.buildDone)
+	s.mu.Lock()
+	s.builder = b
+	s.mu.Unlock()
 }
 
-// startCompilerDiagnostics starts compiler diagnostics after the
-// workspace is loaded: the analyzer, or a first build.
+// startCompilerDiagnostics starts a first build once the workspace is
+// loaded, in Gradle mode (the analyzer starts at once, in Initialized).
 func (s *Server) startCompilerDiagnostics() {
-	switch s.diagMode {
-	case modeAnalyzer:
-		go s.startAnalyzer()
-	case modeGradle:
+	s.mu.Lock()
+	mode := s.diagMode
+	s.mu.Unlock()
+	if mode == modeGradle {
 		s.requestBuild()
 	}
 }
@@ -98,14 +102,15 @@ func (s *Server) fallBackToGradle(reason error) {
 	s.mu.Lock()
 	s.diagMode = modeGradle
 	s.mu.Unlock()
+	s.clearAnalyzerDiagnostics() // e.g. the last run's, restored at startup
 	s.setupGradle()
 	s.requestBuild()
 }
 
 // requestBuild asks for a build (a no-op without a build).
 func (s *Server) requestBuild() {
-	if s.builder != nil {
-		s.builder.Request(s.ctx)
+	if b := s.gradleRunner(); b != nil {
+		b.Request(s.ctx)
 	}
 }
 
@@ -299,4 +304,11 @@ func skipAssignment(src []byte, off int) int {
 		return i
 	}
 	return off
+}
+
+// gradleRunner returns the Gradle build runner, or nil.
+func (s *Server) gradleRunner() *build.Runner {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.builder
 }

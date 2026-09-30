@@ -83,6 +83,12 @@ func workspaceRoot(params *protocol.InitializeParams) string {
 
 func (s *Server) Initialized(ctx context.Context, params *protocol.InitializedParams) error {
 	go s.loadWorkspace()
+	s.mu.Lock()
+	analyzing := s.diagMode == modeAnalyzer
+	s.mu.Unlock()
+	if analyzing {
+		go s.startAnalyzer() // alongside the workspace load: it reads the project itself
+	}
 	return nil
 }
 
@@ -129,8 +135,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func (s *Server) Close() {
 	s.closeAnalyzer()
 	s.cancel()
-	if s.builder != nil {
-		s.builder.Close()
+	if b := s.gradleRunner(); b != nil {
+		b.Close()
 	}
 }
 

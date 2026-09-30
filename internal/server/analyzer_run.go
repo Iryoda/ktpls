@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"time"
 	"unicode/utf8"
 
 	"github.com/Iryoda/ktpls/internal/analyzer"
@@ -14,6 +15,7 @@ import (
 // startAnalyzer starts the analyzer and reports the diagnostics of every
 // file. If it can't start, compiler diagnostics fall back to Gradle.
 func (s *Server) startAnalyzer() {
+	s.az.restoreOnce.Do(s.restoreDiagnostics)
 	s.progressBegin(progressAnalyzer, "Analyzing", "starting the analyzer")
 	c, n, err := s.launchAnalyzer()
 	if err != nil {
@@ -28,7 +30,18 @@ func (s *Server) startAnalyzer() {
 	s.az.mu.Unlock()
 	go s.watchAnalyzer(c)
 	s.progressEnd(progressAnalyzer, fmt.Sprintf("%d files", n))
-	s.diagnoseAllInBatches()
+	s.log.Info("analyzer: started", "sinceStart", s.sinceStart())
+	select {
+	case <-s.loaded: // the files to diagnose, and the open buffers, are known
+	case <-s.ctx.Done():
+		return
+	}
+	if !s.diagnoseAllInBatches() {
+		return
+	}
+	s.log.Info("analyzer: all files diagnosed", "sinceStart", s.sinceStart())
+	s.saveDiagnostics()
+	s.refreshCachedModel()
 }
 
 // analyzerClient returns the running analyzer, or nil.
@@ -45,6 +58,17 @@ func (s *Server) diagnoseWithAnalyzer(paths []string) {
 	if c == nil {
 		return
 	}
+	// Open buffers are checked as they are in the editor, not on disk.
+	paths = slices.DeleteFunc(slices.Clone(paths), func(p string) bool {
+		if s.isOpen(p) {
+			s.liveCheck(p)
+			return true
+		}
+		return false
+	})
+	if len(paths) == 0 {
+		return
+	}
 	files, err := c.Diagnose(s.ctx, paths)
 	if err != nil {
 		s.log.Warn("analyzer: diagnose", "err", err)
@@ -59,10 +83,12 @@ func (s *Server) diagnoseWithAnalyzer(paths []string) {
 		if err != nil {
 			continue
 		}
+		s.recordDisk(f.Path, f.Diagnostics)
 		s.setAnalyzerDiagnostics(f.Path, s.toProtocol(content, f.Diagnostics))
 		delete(updated, f.Path)
 	}
 	for p := range updated {
+		s.recordDisk(p, nil)
 		s.setAnalyzerDiagnostics(p, nil)
 	}
 }
@@ -140,20 +166,64 @@ func utf16ToByte(content []byte, units int) int {
 // that a save's instant check never waits long behind them.
 const startupBatch = 50
 
-// diagnoseAllInBatches diagnoses every Kotlin file of the workspace.
-func (s *Server) diagnoseAllInBatches() {
-	var paths []string
+// diagnoseAllInBatches diagnoses every Kotlin file of the workspace, and
+// reports whether it got through them all.
+func (s *Server) diagnoseAllInBatches() bool {
+	var open, paths []string
 	s.session.Read(func(sn *cache.Snapshot) {
 		for f := range sn.Files() {
-			if cache.IsKotlinFile(f.Path) {
+			switch {
+			case !cache.IsKotlinFile(f.Path):
+			case f.Overlay:
+				open = append(open, f.Path)
+			default:
 				paths = append(paths, f.Path)
 			}
 		}
 	})
 	slices.Sort(paths)
+	paths = append(open, paths...) // open buffers first: they are what the user is looking at
 	for len(paths) > 0 && s.ctx.Err() == nil && s.analyzerClient() != nil {
 		n := min(startupBatch, len(paths))
 		s.diagnoseWithAnalyzer(paths[:n])
 		paths = paths[n:]
+	}
+	return len(paths) == 0
+}
+
+// sinceStart is the time since the server started, for startup timings.
+func (s *Server) sinceStart() time.Duration {
+	return time.Since(s.started).Round(time.Millisecond)
+}
+
+// isOpen reports whether path is open in the editor.
+func (s *Server) isOpen(path string) bool {
+	open := false
+	s.session.Read(func(sn *cache.Snapshot) {
+		if f := sn.File(path); f != nil && f.Overlay {
+			open = true
+		}
+	})
+	return open
+}
+
+// refreshCachedModel checks a model taken from the cache against Gradle's,
+// in the background, and restarts the analyzer if it changed (e.g. a
+// dependency's version resolved differently).
+func (s *Server) refreshCachedModel() {
+	s.az.mu.Lock()
+	cached, gradle, env := s.az.modelCached, s.az.gradle, s.az.env
+	s.az.modelCached = false
+	s.az.mu.Unlock()
+	if !cached {
+		return
+	}
+	changed, err := analyzer.RefreshModel(s.ctx, s.root, gradle, env)
+	switch {
+	case err != nil:
+		s.log.Warn("analyzer: refreshing the project model", "err", err)
+	case changed:
+		s.log.Info("analyzer: the project model changed; restarting")
+		s.restartAnalyzer()
 	}
 }

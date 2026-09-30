@@ -1,10 +1,9 @@
 package server
 
 import (
-	"path/filepath"
-	"strings"
 	"time"
 
+	"github.com/Iryoda/ktpls/internal/analyzer"
 	"github.com/Iryoda/ktpls/internal/cache"
 )
 
@@ -16,7 +15,7 @@ func (s *Server) analyzerSaved(path string) {
 	if c == nil {
 		return
 	}
-	if isBuildFile(path) {
+	if analyzer.IsBuildFile(path) {
 		go s.restartAnalyzer()
 		return
 	}
@@ -37,9 +36,4 @@ func (s *Server) analyzerSaved(path string) {
 	}
 	s.az.timer = time.AfterFunc(rebuildDelay, s.rebuildAnalyzer)
 	s.az.mu.Unlock()
-}
-
-func isBuildFile(path string) bool {
-	base := filepath.Base(path)
-	return strings.HasSuffix(base, ".gradle") || strings.HasSuffix(base, ".gradle.kts") || base == "gradle.properties"
 }

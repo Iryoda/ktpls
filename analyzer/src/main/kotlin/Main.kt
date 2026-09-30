@@ -35,24 +35,21 @@ class Analyzer {
         }
     }
 
-    fun handle(method: String, params: JsonObject): JsonElement = when (method) {
+    fun handle(method: String, params: JsonObject, queue: Queue): JsonElement = when (method) {
         "init" -> {
             model = Model(params.string("model"))
             jdkHome = params.string("jdkHome")
             open()
         }
         "rebuild" -> open()
-        "check" -> {
-            val path = params.string("path")
-            val file = byPath[path] ?: error("not in the project: $path")
-            fileResult(path, ws!!.check(file, params.string("text")))
-        }
+        "check" -> check(params)
         "diagnose" -> {
             val paths = params["paths"]?.let { if (it is JsonNull) null else it.jsonArray.map { p -> p.jsonPrimitive.content } }
             val files = if (paths.isNullOrEmpty()) byPath.values.toList() else paths.mapNotNull { byPath[it] }
             buildJsonObject {
                 put("files", buildJsonArray {
                     for (f in files) {
+                        queue.runChecks(this@Analyzer) // checks don't wait for the whole batch
                         val ds = diagnose(f)
                         if (ds.isNotEmpty()) add(fileResult(f.virtualFile.path, ds))
                     }
@@ -62,8 +59,17 @@ class Analyzer {
         else -> error("unknown method $method")
     }
 
-    private fun fileResult(path: String, ds: List<Diag>) = buildJsonObject {
+    fun check(params: JsonObject): JsonObject {
+        val path = params.string("path")
+        val file = byPath[path] ?: error("not in the project: $path")
+        lateinit var ds: List<Diag>
+        val ms = measureTimeMillis { ds = ws!!.check(file, params.string("text")) }
+        return fileResult(path, ds, ms)
+    }
+
+    private fun fileResult(path: String, ds: List<Diag>, millis: Long? = null) = buildJsonObject {
         put("path", path)
+        if (millis != null) put("millis", millis)
         put("diagnostics", JsonArray(ds.map { d ->
             buildJsonObject {
                 put("severity", when (d.severity) {
@@ -82,33 +88,89 @@ class Analyzer {
 
 private fun JsonObject.string(key: String) = this[key]?.jsonPrimitive?.content ?: error("missing $key")
 
+class Request(val id: Int, val method: String, val params: JsonObject)
+
+// Requests waiting to run, one at a time. Checks (what the user is typing)
+// go first, and a newer check of a file replaces a waiting older one.
+class Queue(private val out: java.io.PrintStream) {
+    private val lock = Object()
+    private val checks = LinkedHashMap<String, Request>()
+    private val others = ArrayDeque<Request>()
+
+    fun put(r: Request) = synchronized(lock) {
+        if (r.method == "check") {
+            val path = r.params["path"]?.jsonPrimitive?.content ?: ""
+            checks.remove(path)?.let { respond(it.id, error = "superseded") }
+            checks[path] = r
+        } else {
+            others.addLast(r)
+        }
+        lock.notifyAll()
+    }
+
+    // take waits for the next request.
+    fun take(): Request {
+        synchronized(lock) {
+            while (true) {
+                nextCheck()?.let { return it }
+                others.removeFirstOrNull()?.let { return it }
+                lock.wait()
+            }
+        }
+    }
+
+    private fun nextCheck(): Request? = synchronized(lock) {
+        val first = checks.keys.firstOrNull() ?: return null
+        checks.remove(first)
+    }
+
+    // runChecks runs the checks waiting now (between the files of a long
+    // request).
+    fun runChecks(analyzer: Analyzer) {
+        while (true) {
+            val r = nextCheck() ?: return
+            run(analyzer, r)
+        }
+    }
+
+    fun run(analyzer: Analyzer, r: Request) {
+        try {
+            respond(r.id, result = analyzer.handle(r.method, r.params, this))
+        } catch (t: Throwable) {
+            System.err.println("analyzer: ${r.method} failed: $t")
+            respond(r.id, error = t.message ?: t.toString())
+        }
+    }
+
+    fun respond(id: Int, result: JsonElement? = null, error: String? = null) {
+        val resp = buildJsonObject {
+            put("id", id)
+            if (error != null) put("error", error) else put("result", result ?: JsonNull)
+        }
+        synchronized(out) {
+            out.println(resp.toString())
+            out.flush()
+        }
+    }
+}
+
 fun main() {
     val analyzer = Analyzer()
     val out = System.out
     System.setOut(System.err) // nothing but responses may reach stdout
-    val reader = System.`in`.bufferedReader()
-    while (true) {
-        val line = reader.readLine() ?: break
-        if (line.isBlank()) continue
-        val req = Json.parseToJsonElement(line).jsonObject
-        val id = req["id"]?.jsonPrimitive?.int ?: 0
-        val method = req["method"]?.jsonPrimitive?.content ?: ""
-        if (method == "shutdown") break
-        val params = (req["params"] as? JsonObject) ?: JsonObject(emptyMap())
-        val resp = try {
-            buildJsonObject {
-                put("id", id)
-                put("result", analyzer.handle(method, params))
-            }
-        } catch (t: Throwable) {
-            System.err.println("analyzer: $method failed: $t")
-            buildJsonObject {
-                put("id", id)
-                put("error", t.message ?: t.toString())
-            }
+    val queue = Queue(out)
+    Thread {
+        val reader = System.`in`.bufferedReader()
+        while (true) {
+            val line = reader.readLine() ?: break
+            if (line.isBlank()) continue
+            val req = Json.parseToJsonElement(line).jsonObject
+            val method = req["method"]?.jsonPrimitive?.content ?: ""
+            if (method == "shutdown") exitProcess(0) // even in the middle of a request
+            val id = req["id"]?.jsonPrimitive?.int ?: 0
+            queue.put(Request(id, method, (req["params"] as? JsonObject) ?: JsonObject(emptyMap())))
         }
-        out.println(resp.toString())
-        out.flush()
-    }
-    exitProcess(0)
+        exitProcess(0) // ktpls is gone
+    }.apply { isDaemon = true; name = "ktpls-reader" }.start()
+    while (true) queue.run(analyzer, queue.take())
 }

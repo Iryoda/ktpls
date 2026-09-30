@@ -54,7 +54,7 @@ type Server struct {
 	savedSinceBuild  map[string]bool
 	lastBuildFailure string
 
-	builder  *build.Runner // nil: no Gradle compiler diagnostics
+	builder  *build.Runner // nil: no Gradle compiler diagnostics; guarded by mu
 	progress bool          // the client shows work-done progress
 
 	opts     initOptions
@@ -62,6 +62,8 @@ type Server struct {
 	diagMode string // modeAnalyzer, modeGradle or modeOff; guarded by mu
 
 	az analyzerState
+
+	started time.Time // when the server was created, for startup timings
 }
 
 // rescanInterval is the minimum time between background rescans of the
@@ -78,6 +80,7 @@ func New(client *protocol.Conn, log *slog.Logger) *Server {
 		log:       log,
 		ctx:       ctx,
 		cancel:    cancel,
+		started:   time.Now(),
 		exited:    make(chan struct{}),
 		loaded:    make(chan struct{}),
 		baselines: map[string]map[string]int{},
