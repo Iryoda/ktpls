@@ -16,6 +16,8 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaConstructorSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaDeclarationSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaEnumEntrySymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaFunctionSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.pointers.KaSymbolPointer
 import org.jetbrains.kotlin.analysis.api.symbols.KaNamedClassSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaTypeAliasSymbol
@@ -48,6 +50,7 @@ data class Candidate(
     val receiver: String?, // an extension's receiver type
     val container: String?, // the declaring class or package
     val member: Boolean,   // a member of the receiver (explicit or implicit), not an extension or import
+    val id: String = "",   // for completionDoc: "generation:index"
 )
 
 // A placeholder identifier at the cursor, so that `xs.` parses as a
@@ -64,12 +67,14 @@ fun complete(ws: Workspace, original: KtFile, text: String, offset: Int, prefix:
     val leaf = file.findElementAt(offset) ?: return emptyList()
     val name = PsiTreeUtil.getParentOfType(leaf, KtSimpleNameExpression::class.java, false) ?: return emptyList()
     val match = nameMatcher(prefix)
+    val generation = ++generations
     return analyze(file) {
-        val out = Collector(match)
+        val out = Collector(match, generation)
         val receiver = receiverOf(name)
         val visibility = createUseSiteVisibilityChecker(file.symbol, receiver, name)
         if (receiver != null) receiverCandidates(file, name, receiver, visibility, out)
         else scopeCandidates(file, name, prefix, visibility, out)
+        last = LastCompletion(generation, file, out.pointers)
         out.items
     }
 }
@@ -82,11 +87,35 @@ private fun receiverOf(name: KtSimpleNameExpression): KtExpression? {
     return q.receiverExpression.takeIf { q.selectorExpression == selector }
 }
 
-private class Collector(val match: (Name) -> Boolean) {
+private class Collector(val match: (Name) -> Boolean, val generation: Int) {
     val items = mutableListOf<Candidate>()
+    val pointers = mutableListOf<KaSymbolPointer<KaSymbol>>()
     val seen = HashSet<String>()
-    fun add(c: Candidate) {
-        if (items.size < MAX_CANDIDATES && seen.add(c.name + "\u0000" + c.signature)) items += c
+    fun add(c: Candidate, symbol: KaSymbol) {
+        if (items.size < MAX_CANDIDATES && seen.add(c.name + "\u0000" + c.signature)) {
+            items += c.copy(id = "$generation:${items.size}")
+            pointers += symbol.createPointer()
+        }
+    }
+}
+
+// The last completion's symbols, for their docs: completionDoc restores
+// one (by its candidate's id) in the file copy it was completed in.
+private class LastCompletion(val generation: Int, val file: KtFile, val pointers: List<KaSymbolPointer<KaSymbol>>)
+
+@Volatile private var last: LastCompletion? = null
+private var generations = 0
+
+// completionDoc returns the docs of a candidate of the last completion,
+// found like a hover's: in the project, or the library's sources jar.
+fun completionDoc(id: String): FoundSource? {
+    val (gen, index) = id.split(":").mapNotNull { it.toIntOrNull() }.takeIf { it.size == 2 } ?: return null
+    val l = last?.takeIf { it.generation == gen } ?: return null
+    val pointer = l.pointers.getOrNull(index) ?: return null
+    return analyze(l.file) {
+        val restored = pointer.restoreSymbol() ?: return@analyze null
+        val symbol = (restored as? KaCallableSymbol)?.fakeOverrideOriginal ?: restored
+        findSource(l.file, symbol)
     }
 }
 
@@ -265,7 +294,7 @@ private fun KaSession.addSymbol(
         receiver = signature.receiverType?.let { renderType(it) },
         container = s.callableId?.let { it.classId?.shortClassName?.asString() ?: it.packageName.asString() }?.takeIf { it.isNotEmpty() },
         member = member,
-    ))
+    ), s)
 }
 
 private fun KaSession.addClassifier(s: KaClassifierSymbol, visibility: KaUseSiteVisibilityChecker, out: Collector) {
@@ -288,7 +317,7 @@ private fun KaSession.addClassifier(s: KaClassifierSymbol, visibility: KaUseSite
         receiver = null,
         container = classId?.let { it.outerClassId?.shortClassName?.asString() ?: it.packageFqName.asString() }?.takeIf { it.isNotEmpty() },
         member = false,
-    ))
+    ), s)
 }
 
 private fun KaSession.visible(s: KaDeclarationSymbol, visibility: KaUseSiteVisibilityChecker): Boolean {

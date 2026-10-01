@@ -68,10 +68,18 @@ class Analyzer {
                         c.receiver?.let { put("receiver", it) }
                         c.container?.let { put("container", it) }
                         if (c.member) put("member", true)
+                        put("id", c.id)
                     }
                 }))
             }
         }
+        "completionDoc" -> completionDoc(params.string("id"))?.let { found ->
+            buildJsonObject {
+                found.doc?.let { put("doc", it) }
+                put("docLanguage", found.language)
+                put("source", sourceJson(found.location))
+            }
+        } ?: JsonNull
         "diagnose" -> {
             val paths = params["paths"]?.let { if (it is JsonNull) null else it.jsonArray.map { p -> p.jsonPrimitive.content } }
             val files = if (paths.isNullOrEmpty()) byPath.values.toList() else paths.mapNotNull { byPath[it] }
@@ -156,7 +164,7 @@ class Queue(private val out: java.io.PrintStream) {
                 checks.remove(path)?.let { respond(it.id, error = "superseded") }
                 checks[path] = r
             }
-            "hover" -> interactive.addLast(r)
+            "hover", "completionDoc" -> interactive.addLast(r)
             "complete" -> {
                 completion?.let { respond(it.id, error = "superseded") }
                 completion = r

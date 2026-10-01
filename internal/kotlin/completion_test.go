@@ -504,3 +504,27 @@ val names: Li|
 		t.Errorf("labels = %v, want List, and no function or keyword", labels)
 	}
 }
+
+func TestCompletionExternalData(t *testing.T) {
+	const src = `package acme.app
+
+fun run(names: List<String>) {
+    names.fl|
+}
+`
+	list, _ := complete(t, src,
+		External{Name: "flatMap", Kind: "function", Signature: "fun Iterable<String>.flatMap(...)", Receiver: "Iterable<String>", Container: "kotlin.collections", ID: "3:0"},
+		External{Name: "flatten", Kind: "function", Receiver: "Iterable<Iterable<T>>"},
+	)
+	it := item(list, "flatMap")
+	if it == nil {
+		t.Fatal("no flatMap")
+	}
+	var d ExternalData
+	if err := json.Unmarshal(it.Data, &d); err != nil || d.Analyzer != "3:0" || d.Container != "kotlin.collections" {
+		t.Errorf("flatMap data = %s (%v)", it.Data, err)
+	}
+	if it := item(list, "flatten"); it == nil || it.Data != nil {
+		t.Errorf("flatten = %+v, want no data without an ID", it)
+	}
+}

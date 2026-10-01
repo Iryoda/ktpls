@@ -401,6 +401,8 @@ type CompletionItem struct {
 	FilterText          string                      `json:"filterText,omitempty"`
 	TextEdit            *TextEdit                   `json:"textEdit,omitempty"`
 	AdditionalTextEdits []TextEdit                  `json:"additionalTextEdits,omitempty"`
+	// Data is kept by the client and sent back with completionItem/resolve.
+	Data json.RawMessage `json:"data,omitempty"`
 }
 
 type SymbolKind int

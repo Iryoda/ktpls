@@ -56,7 +56,9 @@ lspsaga's `peek_definition` and `peek_type_definition` land on the right
 declaration. Completion offers what the compiler sees on the receiver's
 type, besides the workspace's declarations: library members and
 extensions (`xs.map`, `result.getOrNull`, `it.uppercase` in a lambda) and
-what default imports bring in scope (`listOf`). After startup, ktpls has
+what default imports bring in scope (`listOf`), with their documentation
+when an item is selected (from the sources jars, or the JDK's `src.zip`
+for JDK classes). After startup, ktpls has
 Gradle download the
 sources jars still missing, like IntelliJ does (`downloadSources = false`
 turns that off).

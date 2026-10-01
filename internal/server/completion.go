@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
+	"github.com/Iryoda/ktpls/internal/analyzer"
 	"github.com/Iryoda/ktpls/internal/cache"
 	"github.com/Iryoda/ktpls/internal/kotlin"
 	"github.com/Iryoda/ktpls/internal/protocol"
@@ -69,7 +71,33 @@ func (s *Server) analyzerCompletion(ctx context.Context, path string, pos protoc
 	}
 	ext := make([]kotlin.External, len(cands))
 	for i, k := range cands {
-		ext[i] = kotlin.External{Name: k.Name, Kind: k.Kind, Signature: k.Signature, Receiver: k.Receiver, Container: k.Container, Member: k.Member}
+		ext[i] = kotlin.External{Name: k.Name, Kind: k.Kind, Signature: k.Signature, Receiver: k.Receiver, Container: k.Container, Member: k.Member, ID: k.ID}
 	}
 	return ext, true
+}
+
+// ResolveCompletionItem adds the docs of a compiler candidate (a library
+// declaration's, from its sources jar), as hover shows them. The index's
+// items come with theirs.
+func (s *Server) ResolveCompletionItem(ctx context.Context, item *protocol.CompletionItem) (*protocol.CompletionItem, error) {
+	var data kotlin.ExternalData
+	if item.Documentation != nil || len(item.Data) == 0 || json.Unmarshal(item.Data, &data) != nil || data.Analyzer == "" {
+		return item, nil
+	}
+	c := s.analyzerClient()
+	if c == nil {
+		return item, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, hoverTimeout)
+	defer cancel()
+	d, err := c.CompletionDoc(ctx, data.Analyzer)
+	if err != nil {
+		s.log.Debug("analyzer: completion doc", "err", err)
+	}
+	h := &analyzer.HoverInfo{Signature: item.Detail, Container: data.Container}
+	if d != nil {
+		h.Doc, h.DocLanguage = d.Doc, d.DocLanguage
+	}
+	item.Documentation = &protocol.MarkupContent{Kind: protocol.Markdown, Value: hoverMarkdown(h)}
+	return item, nil
 }

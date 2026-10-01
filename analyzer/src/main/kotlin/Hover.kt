@@ -175,7 +175,7 @@ class FoundSource(val location: SourceLocation, val doc: String?, val language: 
 // sources jar next to the library jar holding its class.
 // A SourceLocation with an empty path is in the file being analyzed (the
 // in-memory copy of the buffer), at an offset into its text.
-private fun KaSession.findSource(file: KtFile, symbol: KaSymbol): FoundSource? {
+fun KaSession.findSource(file: KtFile, symbol: KaSymbol): FoundSource? {
     val project = file.project
     val psi = symbol.psi
     if (psi != null && psi.containingFile == file) {
@@ -216,6 +216,7 @@ private fun KaSession.findSource(file: KtFile, symbol: KaSymbol): FoundSource? {
 // or in the library's jars by its JVM name (Kotlin declarations have no
 // PSI). Null if there is no class file.
 private fun KaSession.classFileCandidates(symbol: KaSymbol, psiPath: String?): List<Pair<String, String>>? {
+    jdkCandidates(psiPath)?.let { return it }
     val (jarPath, entry) = if (psiPath != null) {
         psiPath.split("!/", limit = 2).let { it[0] to it[1] }
     } else {
@@ -232,6 +233,16 @@ private fun KaSession.classFileCandidates(symbol: KaSymbol, psiPath: String?): L
         listOfNotNull(info.sourceFile ?: entry.substringAfterLast('/').substringBefore('$').removeSuffix(".class") + ".java")
     val pkgDir = entry.substringBeforeLast('/', "")
     return sourceFiles.distinct().flatMap { Sources.entries(sources, it, pkgDir) }.map { sources to it }
+}
+
+// jdkCandidates returns the JDK's source of a JDK class, from its
+// lib/src.zip: <jdk>!/modules/java.base/java/util/Optional.class is
+// java.base/java/util/Optional.java there. Null if it isn't a JDK class.
+private fun jdkCandidates(psiPath: String?): List<Pair<String, String>>? {
+    val (jdk, entry) = psiPath?.split("!/modules/", limit = 2)?.takeIf { it.size == 2 } ?: return null
+    val src = File(jdk, "lib/src.zip").takeIf { it.isFile }?.path ?: return emptyList()
+    val java = entry.substringBeforeLast('/') + "/" + entry.substringAfterLast('/').substringBefore('$').removeSuffix(".class") + ".java"
+    return if (Sources.has(src, java)) listOf(src to java) else emptyList()
 }
 
 // builtinCandidates returns the stdlib sources declaring a built-in class

@@ -31,6 +31,7 @@ type Server interface {
 	SignatureHelp(context.Context, *SignatureHelpParams) (*SignatureHelp, error)
 	Hover(context.Context, *HoverParams) (*Hover, error)
 	Completion(context.Context, *CompletionParams) (*CompletionList, error)
+	ResolveCompletionItem(context.Context, *CompletionItem) (*CompletionItem, error)
 	DocumentSymbol(context.Context, *DocumentSymbolParams) ([]DocumentSymbol, error)
 	WorkspaceSymbol(context.Context, *WorkspaceSymbolParams) ([]SymbolInformation, error)
 }
@@ -172,6 +173,13 @@ func Dispatch(ctx context.Context, s Server, method string, params json.RawMessa
 			return nil, true, err
 		}
 		res, err := s.Completion(ctx, &p)
+		return res, true, err
+	case "completionItem/resolve":
+		var p CompletionItem
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, true, err
+		}
+		res, err := s.ResolveCompletionItem(ctx, &p)
 		return res, true, err
 	case "textDocument/documentSymbol":
 		var p DocumentSymbolParams

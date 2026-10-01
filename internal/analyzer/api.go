@@ -104,6 +104,7 @@ type Candidate struct {
 	Receiver  string `json:"receiver"`  // an extension's receiver type
 	Container string `json:"container"` // the declaring class or package
 	Member    bool   `json:"member"`    // a member of the (explicit or implicit) receiver
+	ID        string `json:"id"`        // for CompletionDoc, while the next completion hasn't run
 }
 
 // Complete returns the candidates for the identifier being typed at
@@ -115,4 +116,19 @@ func (c *Client) Complete(ctx context.Context, path, text string, offset int, pr
 	}
 	err := c.Call(ctx, "complete", map[string]string{"path": path, "text": text, "offset": strconv.Itoa(offset), "prefix": prefix}, &r)
 	return r.Items, err
+}
+
+// A Doc is a declaration's documentation and where it is.
+type Doc struct {
+	Doc         string  `json:"doc"`         // the raw doc comment
+	DocLanguage string  `json:"docLanguage"` // "kotlin" or "java"
+	Source      *Source `json:"source"`
+}
+
+// CompletionDoc returns the docs of a candidate of the last completion, by
+// its ID; nil if they aren't found or another completion ran since.
+func (c *Client) CompletionDoc(ctx context.Context, id string) (*Doc, error) {
+	var r *Doc
+	err := c.Call(ctx, "completionDoc", map[string]string{"id": id}, &r)
+	return r, err
 }

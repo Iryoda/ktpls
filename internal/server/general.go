@@ -40,7 +40,7 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 			},
 			DefinitionProvider: true,
 			HoverProvider:      true,
-			CompletionProvider: &protocol.CompletionOptions{TriggerCharacters: []string{"."}},
+			CompletionProvider: &protocol.CompletionOptions{TriggerCharacters: []string{"."}, ResolveProvider: true},
 
 			ImplementationProvider: true,
 			TypeDefinitionProvider: true,

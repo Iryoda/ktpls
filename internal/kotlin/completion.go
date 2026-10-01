@@ -2,6 +2,7 @@ package kotlin
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -48,6 +49,14 @@ type External struct {
 	Receiver  string // an extension's receiver type
 	Container string // the declaring class or package
 	Member    bool   // a member of the (explicit or implicit) receiver
+	ID        string // the analyzer's, to resolve its docs
+}
+
+// ExternalData is a compiler candidate's item data: what
+// completionItem/resolve needs to fetch its docs.
+type ExternalData struct {
+	Analyzer  string `json:"analyzer"`            // the candidate's ID
+	Container string `json:"container,omitempty"` // shown under the signature
 }
 
 // CompletionStart returns where the identifier being completed at offset
@@ -119,6 +128,9 @@ func (c *completer) external(ext []External, receiver bool) {
 			Kind:     externalKind(e),
 			Detail:   e.Signature,
 			TextEdit: &protocol.TextEdit{Range: c.edit, NewText: e.Name},
+		}
+		if e.ID != "" {
+			item.Data, _ = json.Marshal(ExternalData{Analyzer: e.ID, Container: e.Container})
 		}
 		switch {
 		case e.Receiver != "":
