@@ -27,8 +27,9 @@ fun formatMoney(amount: Long): String = ""
 fun String.shout(): String = this
 `
 
-// complete returns the completion labels at the "|" in src.
-func complete(t *testing.T, src string) (*protocol.CompletionList, []string) {
+// complete returns the completion labels at the "|" in src, with the
+// compiler's candidates ext.
+func complete(t *testing.T, src string, ext ...External) (*protocol.CompletionList, []string) {
 	t.Helper()
 	i := strings.Index(src, "|")
 	if i < 0 {
@@ -40,7 +41,7 @@ func complete(t *testing.T, src string) (*protocol.CompletionList, []string) {
 	ix.Update(lib.Summary)
 	f, _ := parseOne(t, "/w/acme/app/App.kt", src)
 	ix.Update(f.Summary)
-	list := Complete(f, ix, i)
+	list := Complete(f, ix, i, ext...)
 	var labels []string
 	for _, it := range list.Items {
 		labels = append(labels, it.Label)
@@ -423,5 +424,83 @@ func TestCompletionMergesOverloads(t *testing.T) {
 	}
 	if it := item(list, "generateKey"); it.LabelDetails == nil || it.LabelDetails.Detail != " (+1 overload)" {
 		t.Errorf("label details: %+v", it.LabelDetails)
+	}
+}
+
+func TestCompletionExternal(t *testing.T) {
+	const src = `package acme.app
+
+import acme.lib.Account
+
+fun run(account: Account, names: List<String>) {
+    account.|
+}
+`
+	ext := []External{
+		{Name: "deposit", Kind: "function", Signature: "fun deposit(amount: Long): Unit", Container: "Account", Member: true},
+		{Name: "hashCode", Kind: "function", Signature: "fun hashCode(): Int", Container: "Any", Member: true},
+		{Name: "let", Kind: "function", Signature: "fun Account.let(block: (Account) -> R): R", Receiver: "Account", Container: "kotlin"},
+		{Name: "also", Kind: "function", Signature: "fun Account.also(block: (Account) -> Unit): Account", Receiver: "Account", Container: "kotlin"},
+	}
+	list, labels := complete(t, src, ext...)
+	// Members, the index's and the compiler's, before extensions.
+	for _, m := range []string{"deposit", "id", "hashCode"} {
+		for _, e := range []string{"also", "let"} {
+			if i, j := slices.Index(labels, m), slices.Index(labels, e); i < 0 || j < 0 || i > j {
+				t.Errorf("labels = %v, want member %s before extension %s", labels, m, e)
+			}
+		}
+	}
+	if it := item(list, "deposit"); it == nil || it.Detail == ext[0].Signature {
+		t.Errorf("deposit = %+v, want the index's item, not the compiler's", it)
+	}
+	if it := item(list, "let"); it == nil || it.Kind != protocol.CompletionKindFunction || it.LabelDetails == nil || it.LabelDetails.Description != "ext Account" {
+		t.Errorf("let = %+v", it)
+	}
+	if it := item(list, "hashCode"); it == nil || it.Kind != protocol.CompletionKindMethod {
+		t.Errorf("hashCode = %+v", it)
+	}
+}
+
+func TestCompletionExternalScope(t *testing.T) {
+	const src = `package acme.app
+
+fun run() {
+    val lis = 1
+    li|
+}
+`
+	ext := []External{
+		{Name: "listOf", Kind: "function", Signature: "fun listOf(vararg elements: T): List<T>", Container: "kotlin.collections"},
+		{Name: "List", Kind: "interface", Signature: "interface List<out E>", Container: "kotlin.collections"},
+		{Name: "lazy", Kind: "function", Signature: "fun lazy(initializer: () -> T): Lazy<T>", Container: "kotlin"},
+		{Name: "lis", Kind: "property", Signature: "val lis: Int"}, // a local the index has
+	}
+	list, labels := complete(t, src, ext...)
+	if !slices.Contains(labels, "listOf") || !slices.Contains(labels, "List") {
+		t.Errorf("labels = %v, want listOf and List", labels)
+	}
+	if slices.Index(labels, "lis") > slices.Index(labels, "listOf") {
+		t.Errorf("labels = %v, want the local before imports", labels)
+	}
+	if n := strings.Count(strings.Join(labels, " ")+" ", "lis "); n != 1 {
+		t.Errorf("lis offered %d times", n)
+	}
+	if it := item(list, "listOf"); it.LabelDetails == nil || it.LabelDetails.Description != "kotlin.collections" {
+		t.Errorf("listOf = %+v", it)
+	}
+}
+
+func TestCompletionExternalTypePosition(t *testing.T) {
+	const src = `package acme.app
+
+val names: Li|
+`
+	_, labels := complete(t, src,
+		External{Name: "List", Kind: "interface", Container: "kotlin.collections"},
+		External{Name: "listOf", Kind: "function", Container: "kotlin.collections"},
+	)
+	if !slices.Contains(labels, "List") || slices.Contains(labels, "listOf") || slices.Contains(labels, "lateinit") {
+		t.Errorf("labels = %v, want List, and no function or keyword", labels)
 	}
 }

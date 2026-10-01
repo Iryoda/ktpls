@@ -31,8 +31,10 @@ class Analyzer {
         val ms = measureTimeMillis { fresh = Workspace(model!!, jdkHome) }
         ws = fresh
         byPath = fresh.files.associateBy { it.virtualFile.path }
-        Sources.stdlib = (model!!.paths("KTPLS-CLASSPATH", "main") + model!!.paths("KTPLS-CLASSPATH", "test"))
-            .map { it.toString() }.filter { Regex("""kotlin-stdlib-\d""").containsMatchIn(it.substringAfterLast('/')) }.distinct()
+        val classpath = (model!!.paths("KTPLS-CLASSPATH", "main") + model!!.paths("KTPLS-CLASSPATH", "test"))
+            .map { it.toString() }.distinct()
+        Sources.stdlib = classpath.filter { Regex("""kotlin-stdlib-\d""").containsMatchIn(it.substringAfterLast('/')) }
+        LibraryNames.index(classpath.filter { it.endsWith(".jar") })
         return buildJsonObject {
             put("files", fresh.files.size)
             put("millis", ms)
@@ -52,6 +54,23 @@ class Analyzer {
             val file = byPath[path] ?: error("not in the project: $path")
             val copy = ws!!.copyOf(file, params.string("text"))
             hover(copy, params.string("offset").toInt())?.let { hoverResult(it) } ?: JsonNull
+        }
+        "complete" -> {
+            val path = params.string("path")
+            val file = byPath[path] ?: error("not in the project: $path")
+            val items = complete(ws!!, file, params.string("text"), params.string("offset").toInt(), params["prefix"]?.jsonPrimitive?.content.orEmpty())
+            buildJsonObject {
+                put("items", JsonArray(items.map { c ->
+                    buildJsonObject {
+                        put("name", c.name)
+                        put("kind", c.kind)
+                        put("signature", c.signature)
+                        c.receiver?.let { put("receiver", it) }
+                        c.container?.let { put("container", it) }
+                        if (c.member) put("member", true)
+                    }
+                }))
+            }
         }
         "diagnose" -> {
             val paths = params["paths"]?.let { if (it is JsonNull) null else it.jsonArray.map { p -> p.jsonPrimitive.content } }
@@ -120,13 +139,14 @@ private fun JsonObject.string(key: String) = this[key]?.jsonPrimitive?.content ?
 class Request(val id: Int, val method: String, val params: JsonObject)
 
 // Requests waiting to run, one at a time. Interactive requests (checks of
-// what the user is typing, hovers) go first, and a newer check of a file
-// replaces a waiting older one.
+// what the user is typing, hovers, completions) go first, and a newer
+// check of a file, or completion, replaces a waiting older one.
 class Queue(private val out: java.io.PrintStream) {
     private val lock = ReentrantLock()
     private val arrived = lock.newCondition()
     private val checks = LinkedHashMap<String, Request>()
     private val interactive = ArrayDeque<Request>()
+    private var completion: Request? = null
     private val others = ArrayDeque<Request>()
 
     fun put(r: Request) = lock.withLock {
@@ -137,6 +157,10 @@ class Queue(private val out: java.io.PrintStream) {
                 checks[path] = r
             }
             "hover" -> interactive.addLast(r)
+            "complete" -> {
+                completion?.let { respond(it.id, error = "superseded") }
+                completion = r
+            }
             else -> others.addLast(r)
         }
         arrived.signalAll()
@@ -155,6 +179,7 @@ class Queue(private val out: java.io.PrintStream) {
 
     // nextCheck returns the next interactive request.
     private fun nextCheck(): Request? = lock.withLock {
+        completion?.let { completion = null; return it }
         interactive.removeFirstOrNull()?.let { return it }
         val first = checks.keys.firstOrNull() ?: return null
         checks.remove(first)

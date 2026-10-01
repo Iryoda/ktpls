@@ -53,7 +53,11 @@ go to definition opens the declaration in those sources (extracted to
 and declaration also ask the analyzer when ktpls can't tell a value's
 type from the source, as for a lambda parameter of a library call, so
 lspsaga's `peek_definition` and `peek_type_definition` land on the right
-declaration. After startup, ktpls has Gradle download the
+declaration. Completion offers what the compiler sees on the receiver's
+type, besides the workspace's declarations: library members and
+extensions (`xs.map`, `result.getOrNull`, `it.uppercase` in a lambda) and
+what default imports bring in scope (`listOf`). After startup, ktpls has
+Gradle download the
 sources jars still missing, like IntelliJ does (`downloadSources = false`
 turns that off).
 

@@ -93,3 +93,26 @@ func (c *Client) Hover(ctx context.Context, path, text string, offset int) (*Hov
 	err := c.Call(ctx, "hover", map[string]string{"path": path, "text": text, "offset": strconv.Itoa(offset)}, &r)
 	return r, err
 }
+
+// A Candidate is a completion candidate the compiler offers: a member or
+// extension of the receiver's type, or, without a receiver, a declaration
+// in scope.
+type Candidate struct {
+	Name      string `json:"name"`
+	Kind      string `json:"kind"` // function, property, class, interface, object, enum, enumEntry, typeAlias
+	Signature string `json:"signature"`
+	Receiver  string `json:"receiver"`  // an extension's receiver type
+	Container string `json:"container"` // the declaring class or package
+	Member    bool   `json:"member"`    // a member of the (explicit or implicit) receiver
+}
+
+// Complete returns the candidates for the identifier being typed at
+// offset (UTF-16) in text, the content of the file at path; prefix is
+// what has been typed of it.
+func (c *Client) Complete(ctx context.Context, path, text string, offset int, prefix string) ([]Candidate, error) {
+	var r struct {
+		Items []Candidate `json:"items"`
+	}
+	err := c.Call(ctx, "complete", map[string]string{"path": path, "text": text, "offset": strconv.Itoa(offset), "prefix": prefix}, &r)
+	return r.Items, err
+}

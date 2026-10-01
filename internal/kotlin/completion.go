@@ -38,19 +38,38 @@ var keywords = []string{
 	"when", "where", "while",
 }
 
-// Complete returns completion candidates at offset in f.
-func Complete(f *ParsedFile, ix *Index, offset int) *protocol.CompletionList {
-	src := f.Content
-	start := identStartBefore(src, offset)
-	prefix := string(src[start:offset])
-	if prefix != "" {
-		if r, _ := utf8.DecodeRuneInString(prefix); r >= '0' && r <= '9' {
-			return emptyList() // a number
-		}
+// An External candidate is one the compiler offers that the index can't
+// know: a library member or extension (the stdlib's map, getOrNull...), or
+// a declaration in scope through a default import (listOf).
+type External struct {
+	Name      string
+	Kind      string // function, property, class, interface, object, enum, enumEntry, typeAlias
+	Signature string
+	Receiver  string // an extension's receiver type
+	Container string // the declaring class or package
+	Member    bool   // a member of the (explicit or implicit) receiver
+}
+
+// CompletionStart returns where the identifier being completed at offset
+// starts, and whether there is anything to complete there: not in a
+// comment, a string or a number.
+func CompletionStart(f *ParsedFile, offset int) (int, bool) {
+	start := identStartBefore(f.Content, offset)
+	if r, _ := utf8.DecodeRune(f.Content[start:offset]); start < offset && r >= '0' && r <= '9' {
+		return start, false // a number
 	}
-	if inCommentOrString(f.Tree, offset) {
+	return start, !inCommentOrString(f.Tree, offset)
+}
+
+// Complete returns completion candidates at offset in f: from the index,
+// then those of ext it doesn't have.
+func Complete(f *ParsedFile, ix *Index, offset int, ext ...External) *protocol.CompletionList {
+	src := f.Content
+	start, ok := CompletionStart(f, offset)
+	if !ok {
 		return emptyList()
 	}
+	prefix := string(src[start:offset])
 	editRange, _ := f.Mapper.OffsetRange(start, offset)
 	c := &completer{
 		f: f, ix: ix, src: src,
@@ -60,12 +79,87 @@ func Complete(f *ParsedFile, ix *Index, offset int) *protocol.CompletionList {
 
 		overloads: map[int]int{},
 	}
-	if recv := receiverBefore(f.Tree, src, start); recv != nil {
+	recv := receiverBefore(f.Tree, src, start)
+	if recv != nil {
 		c.members(recv)
 	} else {
 		c.scope(start)
 	}
+	c.external(ext, recv != nil)
 	return c.list()
+}
+
+// external offers the compiler's candidates whose names the index didn't
+// offer: members of the receiver, then extensions (or, without a
+// receiver, what imports bring in scope).
+func (c *completer) external(ext []External, receiver bool) {
+	have := map[string]bool{}
+	for _, it := range c.items {
+		have[it.item.Label] = true
+	}
+	for _, e := range ext {
+		if have[e.Name] || (c.typesOnly && !externalType(e)) {
+			continue
+		}
+		score, ok := fuzzy.Score(c.prefix, e.Name)
+		if !ok {
+			continue
+		}
+		tier := tierVisible
+		switch {
+		case e.Member:
+			tier = tierMember
+		case receiver:
+			tier = tierInherit
+		case !textutil.SameFirstRune(c.prefix, e.Name):
+			continue // imports, like not-imported declarations
+		}
+		item := protocol.CompletionItem{
+			Label:    e.Name,
+			Kind:     externalKind(e),
+			Detail:   e.Signature,
+			TextEdit: &protocol.TextEdit{Range: c.edit, NewText: e.Name},
+		}
+		switch {
+		case e.Receiver != "":
+			item.LabelDetails = &protocol.CompletionItemLabelDetails{Description: "ext " + e.Receiver}
+		case e.Container != "":
+			item.LabelDetails = &protocol.CompletionItemLabelDetails{Description: e.Container}
+		}
+		c.add(item, tier, score)
+	}
+}
+
+func externalType(e External) bool {
+	switch e.Kind {
+	case "class", "interface", "object", "enum", "typeAlias":
+		return true
+	}
+	return false
+}
+
+func externalKind(e External) protocol.CompletionItemKind {
+	switch e.Kind {
+	case "class", "typeAlias":
+		return protocol.CompletionKindClass
+	case "interface":
+		return protocol.CompletionKindInterface
+	case "enum":
+		return protocol.CompletionKindEnum
+	case "object":
+		return protocol.CompletionKindModule
+	case "enumEntry":
+		return protocol.CompletionKindEnumMember
+	case "function":
+		if e.Member {
+			return protocol.CompletionKindMethod
+		}
+		return protocol.CompletionKindFunction
+	}
+	if e.Member {
+		return protocol.CompletionKindField
+	}
+	return protocol.CompletionKindProperty
 }
 
 // emptyList returns a list with no items. Items must be [] rather than
@@ -76,10 +170,11 @@ func emptyList() *protocol.CompletionList {
 
 type completer struct {
 	resolver
-	prefix string
-	edit   protocol.Range
-	items  []scored
-	seen   map[string]bool // dedup key: label + detail
+	prefix    string
+	edit      protocol.Range
+	typesOnly bool // after a colon, where only types fit
+	items     []scored
+	seen      map[string]bool // dedup key: label + detail
 
 	overloads map[int]int // item index -> further overloads merged into it
 }
@@ -279,7 +374,8 @@ func (c *completer) instanceMembers(container string, tier int, visited map[stri
 // scope offers everything visible without a receiver at offset.
 func (c *completer) scope(offset int) {
 	anchor := c.f.Tree.RootNode().NamedDescendantForByteRange(uint(offset), uint(offset))
-	typesOnly := typePosition(c.src, offset-len(c.prefix))
+	typesOnly := typePosition(c.src, offset) // offset: where the identifier starts
+	c.typesOnly = typesOnly
 
 	inArgs := false
 	if !typesOnly {

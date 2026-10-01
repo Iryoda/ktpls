@@ -71,7 +71,9 @@ diagnostics once the JVM side has warmed up.
 - **Completion**: members after `.` (inherited, extensions, companion and
   enum entries), locals, enclosing-class members, named arguments
   (`name =`), keywords, and workspace declarations not yet imported
-  (accepting one adds the `import`).
+  (accepting one adds the `import`). With the analyzer, library members
+  and extensions on the receiver's inferred type (`map`, `flatMap`,
+  `getOrNull`...) and declarations from default imports (`listOf`).
 - **Signature help**: overloads, the current parameter (by position or
   `name =`) and KDoc.
 - **Rename** across the workspace. A method's whole override family is

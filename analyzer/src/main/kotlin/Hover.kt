@@ -136,9 +136,11 @@ private val declarationRenderer = KaDeclarationRendererForSource.WITH_SHORT_NAME
 
 private fun KaSession.render(t: KaType) = t.render(hoverTypeRenderer, Variance.INVARIANT)
 
+fun KaSession.renderType(t: KaType) = render(t)
+
 // renderDeclaration renders a declaration; a constructor as the function
 // it is: fun <T> Box(value: T): Box<T>.
-private fun KaSession.renderDeclaration(symbol: KaDeclarationSymbol): String {
+fun KaSession.renderDeclaration(symbol: KaDeclarationSymbol): String {
     if (symbol is KaConstructorSymbol) {
         val name = symbol.containingClassId?.shortClassName?.asString() ?: "constructor"
         val params = symbol.typeParameters.map { it.name.asString() }
@@ -150,7 +152,7 @@ private fun KaSession.renderDeclaration(symbol: KaDeclarationSymbol): String {
 
 // renderCall renders a signature as `fun Receiver.name(p: T): R` (or
 // `val Receiver.name: R`).
-private fun KaSession.renderCall(name: String, sig: org.jetbrains.kotlin.analysis.api.signatures.KaCallableSignature<*>): String {
+fun KaSession.renderCall(name: String, sig: org.jetbrains.kotlin.analysis.api.signatures.KaCallableSignature<*>): String {
     val receiver = sig.receiverType?.let { render(it) + "." } ?: ""
     return when (sig) {
         is KaFunctionSignature<*> -> "fun " + receiver + name + sig.valueParameters.joinToString(", ", "(", ")") {
