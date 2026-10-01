@@ -25,6 +25,9 @@ func (s *Server) Definition(ctx context.Context, params *protocol.DefinitionPara
 		if locs = s.messageDefinition(sn, path, params.Position); locs != nil {
 			return
 		}
+		if locs = s.propertyDefinition(f, f.Mapper.PositionOffset(params.Position)); locs != nil {
+			return
+		}
 		locs, guess = kotlin.DefinitionGuess(f, sn.Index(), f.Mapper.PositionOffset(params.Position))
 	})
 	if err != nil || len(locs) > 0 && !guess {

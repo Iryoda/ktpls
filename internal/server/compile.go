@@ -31,6 +31,12 @@ type initOptions struct {
 		// learned ones, as "Function(param)" or "Class(param)".
 		KeyParameters []string `json:"keyParameters"`
 	} `json:"messages"`
+	Properties *struct {
+		Enabled *bool `json:"enabled"` // check ${key} placeholders (default true)
+		// Ignore are key prefixes not to check, set elsewhere (e.g.
+		// "vault." for properties from Vault).
+		Ignore []string `json:"ignore"`
+	} `json:"properties"`
 	Analyzer *struct {
 		Jar       string `json:"jar"`       // default: analyzer.jar next to ktpls
 		JavaHome  string `json:"javaHome"`  // default: compile.env.JAVA_HOME, $JAVA_HOME, java on PATH

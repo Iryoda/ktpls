@@ -104,6 +104,11 @@ diagnostics once the JVM side has warmed up.
 - **Message keys**: warns when a string passed where a message-bundle key
   is expected isn't in `messages.properties`, like IntelliJ's property-key
   check. Hover on a key shows its translations.
+- **Configuration properties**: warns when a `${key}` placeholder in a
+  string (`@Value("\${server.port}")`, a Feign client's `url`) isn't in
+  `application.yml` or `.properties` (any profile), suggesting the
+  closest key. Hover shows its value in each profile; go to definition
+  opens it in the YAML.
 
 **Workspace**
 
@@ -230,6 +235,10 @@ init_options = {
     enabled = true,
     keyParameters = { "ApiError(code)" },   -- extra parameters that take message keys
   },
+  properties = {
+    enabled = true,
+    ignore = { "vault." },           -- key prefixes set elsewhere
+  },
 }
 ```
 
@@ -270,6 +279,7 @@ The layout follows gopls:
 | `internal/analyzer` | Client for the analyzer process, Gradle project model |
 | `internal/build` | Runs Gradle builds and parses the compiler's messages |
 | `internal/messages` | Message bundles (`.properties`) |
+| `internal/springconfig` | Spring configuration (`application.yml`, `.properties`) |
 | `internal/util/textutil` | Shared text helpers (`gopls/internal/util`) |
 | `analyzer/` | The JVM analyzer (Kotlin Analysis API). See its [README](analyzer/README.md) |
 | `editors/nvim` | Neovim plugin and Mason registry |

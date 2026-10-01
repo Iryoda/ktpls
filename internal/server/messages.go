@@ -2,6 +2,8 @@ package server
 
 import (
 	"fmt"
+	"iter"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -107,13 +109,19 @@ func nearestKey(b *messages.Bundles, key string) string {
 	if key == "" || strings.ContainsRune(key, ' ') {
 		return "" // a message, not a mistyped key
 	}
-	best, bestDist := "", len(key)/4+2
-	for k := range b.Keys {
-		if abs(len(k)-len(key)) >= bestDist {
+	return nearest(maps.Keys(b.Keys), key)
+}
+
+// nearest returns the key closest to a mistyped one, if close enough.
+func nearest(keys iter.Seq[string], key string) string {
+	best, bestDist := "", len(key)/4+1 // the farthest accepted
+	for k := range keys {
+		if abs(len(k)-len(key)) > bestDist {
 			continue
 		}
-		d := editDistance(k, key, bestDist)
-		if d < bestDist || d == bestDist && best != "" && closer(k, best, key) {
+		// Capped past the best, so that a tie is exact.
+		d := editDistance(k, key, bestDist+1)
+		if d < bestDist || d == bestDist && (best == "" || closer(k, best, key)) {
 			best, bestDist = k, d
 		}
 	}

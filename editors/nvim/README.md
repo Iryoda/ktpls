@@ -131,3 +131,34 @@ vim.lsp.config("ktpls", {
   },
 })
 ```
+
+## Configuration properties
+
+Placeholders of Spring properties in strings, `"\${services.billing.host}"`
+(or `${'$'}{key}` in a raw string), are checked against the project's
+configuration: `application.yml`, `application.yaml`,
+`application.properties` and `bootstrap.*` in `src/*/resources`, with
+their profile variants (`application-production.yml`). Keys match as
+Spring's relaxed binding does (`servicesMapping` is `services-mapping`);
+test code also sees the test resources. A key missing from all of them
+gets a warning with the closest key, and one naming a section (properties
+nested under it) gets a warning too. Hover shows the value in each
+profile, and go to definition opens each one.
+
+Not checked: keys with a default (`\${port:8080}`), environment-style
+names (`\${DB_HOST}`), names from other sources such as a secret manager
+(`\${sm@api-key}`), and properties set at run time (`random.*`, JVM system
+properties such as `user.home`, `local.server.port`). When
+`spring.config.import` brings in a config server, Vault or the like, the
+warning becomes information, since the key may come from there.
+
+```lua
+vim.lsp.config("ktpls", {
+  init_options = {
+    properties = {
+      enabled = true,
+      ignore = { "vault." },  -- key prefixes defined elsewhere
+    },
+  },
+})
+```

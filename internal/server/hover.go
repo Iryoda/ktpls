@@ -26,6 +26,9 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 		if hover = s.messageHover(sn, path, params.Position); hover != nil {
 			return
 		}
+		if hover = s.propertyHover(f, f.Mapper.PositionOffset(params.Position)); hover != nil {
+			return
+		}
 		if h := kotlin.Hover(f, sn.Index(), f.Mapper.PositionOffset(params.Position)); h != nil {
 			if h.Local {
 				local = h

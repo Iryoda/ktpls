@@ -83,6 +83,7 @@ func (s *Server) publishDiagnostics(path string) {
 		if pf == nil {
 			return
 		}
+		diags = append(diags, s.propertyDiagnostics(pf)...)
 		compiled := map[uint32]bool{}
 		for _, d := range diags {
 			compiled[d.Range.Start.Line] = true
