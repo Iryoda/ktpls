@@ -1,3 +1,6 @@
+> [!WARNING]
+> This is mostly a "vibe-coded" project. I was really frustrated by the Kotlin LSP implementations currently available, and I didn't like IntelliJ eating 10 GB of RAM while idle. So this is a more resource-friendly alternative, with many features other LSPs don't have, and it makes developing Kotlin in Neovim possible.
+
 # ktpls
 
 **ktpls** is a language server for
