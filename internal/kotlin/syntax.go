@@ -1,9 +1,9 @@
 // Package kotlin implements Kotlin language features (definition, hover,
 // completion, ...) on top of tree-sitter syntax trees.
 //
-// Node kinds follow the fwcd/tree-sitter-kotlin grammar; see "Grammar
-// notes" in PLAN.md. That grammar uses no field names, so children are
-// found by kind.
+// Node kinds follow the fwcd/tree-sitter-kotlin grammar (inspect a file
+// with `go run ./tools/tsdump File.kt`). That grammar uses no field names,
+// so children are found by kind.
 package kotlin
 
 import (
