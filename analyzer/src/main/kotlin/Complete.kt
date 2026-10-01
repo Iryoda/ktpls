@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaFunctionSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.pointers.KaSymbolPointer
 import org.jetbrains.kotlin.analysis.api.symbols.KaNamedClassSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaNamedFunctionSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaTypeAliasSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaTypeParameterSymbol
@@ -284,7 +285,7 @@ private fun KaSession.addSymbol(
     s: KaCallableSymbol, sig: KaCallableSignature<*>?, member: Boolean,
     visibility: KaUseSiteVisibilityChecker, out: Collector,
 ) {
-    if (s is KaConstructorSymbol || !visible(s, visibility)) return
+    if (s is KaConstructorSymbol || dataComponent(s) || !visible(s, visibility)) return
     val name = s.callableId?.callableName?.asString() ?: (s as? KaNamedSymbol)?.name?.asString() ?: return
     val signature = sig ?: s.asSignature()
     out.add(Candidate(
@@ -295,6 +296,16 @@ private fun KaSession.addSymbol(
         container = s.callableId?.let { it.classId?.shortClassName?.asString() ?: it.packageName.asString() }?.takeIf { it.isNotEmpty() },
         member = member,
     ), s)
+}
+
+private val componentName = Regex("""component\d+""")
+
+// dataComponent reports whether s is a data class's generated componentN,
+// for destructuring: not called by name, so not offered (as in IntelliJ).
+// Explicit operator functions, like Map.Entry's component1, are.
+private fun KaSession.dataComponent(s: KaCallableSymbol): Boolean {
+    if (s !is KaNamedFunctionSymbol || s.isExtension || !componentName.matches(s.name.asString())) return false
+    return (s.fakeOverrideOriginal.containingDeclaration as? KaNamedClassSymbol)?.isData == true
 }
 
 private fun KaSession.addClassifier(s: KaClassifierSymbol, visibility: KaUseSiteVisibilityChecker, out: Collector) {
