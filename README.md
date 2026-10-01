@@ -126,11 +126,15 @@ Kotlin stdlib or library jars.
 ### Neovim with Mason
 
 The plugin in [`editors/nvim`](editors/nvim) ships the server config and a
-local Mason registry that builds ktpls and the analyzer from this checkout:
+local Mason registry that clones ktpls from GitHub and builds it and the
+analyzer:
 
 ```lua
 -- lazy.nvim
-{ dir = "/path/to/ktpls/editors/nvim" },
+{
+  "Iryoda/ktpls",
+  init = function(plugin) vim.opt.rtp:append(plugin.dir .. "/editors/nvim") end,
+},
 
 require("mason").setup({
   registries = { "github:mason-org/mason-registry", "lua:ktpls.mason" },

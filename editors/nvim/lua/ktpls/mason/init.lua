@@ -1,5 +1,5 @@
--- A Mason registry holding one package, ktpls, built from the local
--- checkout this file belongs to. Add it next to the default registry:
+-- A Mason registry holding one package, ktpls, cloned from
+-- github.com/Iryoda/ktpls and built. Add it next to the default registry:
 --
 --   require("mason").setup({
 --     registries = { "github:mason-org/mason-registry", "lua:ktpls.mason" },
